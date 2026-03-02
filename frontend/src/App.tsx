@@ -1,113 +1,71 @@
 import { useEffect, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, Routes, Route, Navigate } from 'react-router-dom'
 import './style.css'
 import { DashboardSection } from './sections/DashboardSection'
 import { UploadSection } from './sections/UploadSection'
 import { ScheduleSection } from './sections/ScheduleSection'
 import { AnalyticsSection } from './sections/AnalyticsSection'
+import Login from './pages/Login'
+import {supabase} from './lib/supabase'
+import type {Session} from '@supabase/supabase-js'
 
-function App() {
+// ── Protected layout (your existing sidebar + main) ──────────────────────────
+function AppLayout() {
   const location = useLocation()
   const navigate = useNavigate()
 
-  // Step 5.1: State = remember which section is selected
-  const [activeSection, setActiveSection] = useState<
-    'dashboard' | 'upload' | 'schedule' | 'analytics'
-  >('dashboard')
+  type Section = 'dashboard' | 'upload' | 'schedule' | 'analytics'
+  const [activeSection, setActiveSection] = useState<Section>('dashboard')
 
-  // Sync activeSection with URL (so refresh keeps you on the same tab)
   useEffect(() => {
-    if (location.pathname === '/upload') {
-      setActiveSection('upload')
-    } else if (location.pathname === '/schedule') {
-      setActiveSection('schedule')
-    } else if (location.pathname === '/analytics') {
-      setActiveSection('analytics')
-    } else {
-      // anything else, treat as dashboard
-      setActiveSection('dashboard')
-    }
+    if (location.pathname === '/upload') setActiveSection('upload')
+    else if (location.pathname === '/schedule') setActiveSection('schedule')
+    else if (location.pathname === '/analytics') setActiveSection('analytics')
+    else setActiveSection('dashboard')
   }, [location.pathname])
 
-  // Step 5.3: Derived text = what to show in the main area (based on activeSection)
   const pageTitle =
-    activeSection === 'dashboard'
-      ? 'Dashboard'
-      : activeSection === 'upload'
-        ? 'Upload content'
-        : activeSection === 'schedule'
-          ? 'Schedule'
-          : 'Analytics'
+    activeSection === 'dashboard' ? 'Dashboard'
+    : activeSection === 'upload' ? 'Upload content'
+    : activeSection === 'schedule' ? 'Schedule'
+    : 'Analytics'
 
   const pageSubtitle =
-    activeSection === 'dashboard'
-      ? 'Overview of your content, AI suggestions, and performance.'
-      : activeSection === 'upload'
-        ? 'Upload videos that you want to optimize and publish.'
-        : activeSection === 'schedule'
-          ? 'Manage when your posts go live across platforms.'
-          : 'See how your content performs over time.'
+    activeSection === 'dashboard' ? 'Overview of your content, AI suggestions, and performance.'
+    : activeSection === 'upload' ? 'Upload videos that you want to optimize and publish.'
+    : activeSection === 'schedule' ? 'Manage when your posts go live across platforms.'
+    : 'See how your content performs over time.'
 
   return (
     <div className="app-container">
-      {/* Sidebar on the left */}
       <aside className="sidebar">
         <div>
           <div className="sidebar-title">GROWTH PLATFORM</div>
         </div>
-
-        {/* Step 5.2: Click handlers update state; active item gets the 'active' class */}
         <nav className="sidebar-nav">
-          <div
-            className={`nav-item ${activeSection === 'dashboard' ? 'active' : ''}`}
-            onClick={() => {
-              setActiveSection('dashboard')
-              navigate('/')
-            }}
-          >
-            Dashboard
-          </div>
-          <div
-            className={`nav-item ${activeSection === 'upload' ? 'active' : ''}`}
-            onClick={() => {
-              setActiveSection('upload')
-              navigate('/upload')
-            }}
-          >
-            Upload
-          </div>
-          <div
-            className={`nav-item ${activeSection === 'schedule' ? 'active' : ''}`}
-            onClick={() => {
-              setActiveSection('schedule')
-              navigate('/schedule')
-            }}
-          >
-            Schedule
-          </div>
-          <div
-            className={`nav-item ${activeSection === 'analytics' ? 'active' : ''}`}
-            onClick={() => {
-              setActiveSection('analytics')
-              navigate('/analytics')
-            }}
-          >
-            Analytics
-          </div>
+          {(['dashboard', 'upload', 'schedule', 'analytics'] as const).map((section) => (
+            <div
+              key={section}
+              className={`nav-item ${activeSection === section ? 'active' : ''}`}
+              onClick={() => {
+                setActiveSection(section)
+                navigate(section === 'dashboard' ? '/' : `/${section}`)
+              }}
+            >
+              {section.charAt(0).toUpperCase() + section.slice(1)}
+            </div>
+          ))}
         </nav>
-
         <div className="sidebar-footer">
           AI-powered captions, hashtags, and posting strategy.
         </div>
       </aside>
 
-      {/* Main content on the right */}
       <main className="main">
         <header>
           <h1 className="main-header-title">{pageTitle}</h1>
           <p className="main-header-subtitle">{pageSubtitle}</p>
         </header>
-
         <section className="main-card">
           {activeSection === 'dashboard' && <DashboardSection />}
           {activeSection === 'upload' && <UploadSection />}
@@ -116,6 +74,40 @@ function App() {
         </section>
       </main>
     </div>
+  )
+}
+
+// ── Root App with routes ──────────────────────────────────────────────────────
+function App() {
+  const [session, setSession] = useState<Session | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('Session on load:', session)
+      setSession(session)
+      setLoading(false)  
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log('Auth state changed:', _event, session)
+      setSession(session)
+      setLoading(false)  
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  if (loading) return <div style={{ color: '#e6edf3', background: '#0d1117', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading...</div>
+
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route
+        path="/*"
+        element={session ? <AppLayout /> : <Navigate to="/login" replace />}
+      />
+    </Routes>
   )
 }
 
