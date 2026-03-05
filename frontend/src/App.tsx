@@ -57,8 +57,26 @@ function AppLayout() {
           ))}
         </nav>
         <div className="sidebar-footer">
-          AI-powered captions, hashtags, and posting strategy.
-        </div>
+  <div style={{ marginBottom: '12px' }}>AI-powered captions, hashtags, and posting strategy.</div>
+  <button
+    onClick={async () => {
+      await supabase.auth.signOut()
+      window.location.href = '/login'
+    }}
+    style={{
+      width: '100%',
+      padding: '8px 12px',
+      background: 'transparent',
+      border: '1px solid #30363d',
+      borderRadius: '6px',
+      color: '#8b949e',
+      fontSize: '13px',
+      cursor: 'pointer',
+    }}
+  >
+    Log Out
+  </button>
+</div>
       </aside>
 
       <main className="main">
@@ -74,6 +92,7 @@ function AppLayout() {
         </section>
       </main>
     </div>
+    
   )
 }
 
