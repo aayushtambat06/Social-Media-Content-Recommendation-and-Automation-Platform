@@ -54,8 +54,8 @@ export default function Login() {
       }}>
         {/* Header */}
         <div style={{ marginBottom: '32px', textAlign: 'center' }}>
-          <div style={{ color: '#4fa3e3', fontWeight: 700, fontSize: '13px', letterSpacing: '2px', marginBottom: '8px' }}>
-            GROWTH PLATFORM
+          <div style={{ color: '#4fa3e3', fontWeight: 700, fontSize: '20px', letterSpacing: '2px', marginBottom: '8px' }}>
+            TRENDPILOT
           </div>
           <h1 style={{ color: '#e6edf3', fontSize: '24px', fontWeight: 600, margin: 0 }}>
             {isSignUp ? 'Create your account' : 'Welcome back'}

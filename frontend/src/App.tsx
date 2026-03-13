@@ -84,9 +84,9 @@ function AppLayout({ session, savedProfile, setSavedProfile }: {
  
       {/* ── Sidebar ── */}
       <aside className="sidebar">
-        <div className="sidebar-title">GROWTH PLATFORM</div>
+        <div className="sidebar-title">TRENDPILOT</div>
  
-        <div className="nav-section-label">Main</div>
+        {/* <div className="nav-section-label">Main</div> */}
  
         <nav className="sidebar-nav">
           {NAV.map(n => (
