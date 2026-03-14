@@ -5,6 +5,7 @@ import { DashboardSection } from './sections/DashboardSection'
 import { UploadSection } from './sections/UploadSection'
 import { ScheduleSection } from './sections/ScheduleSection'
 import { AnalyticsSection } from './sections/AnalyticsSection'
+import { SettingsSection } from './sections/SettingsSection'
 import Login from './pages/Login'
 import { supabase } from './lib/supabase'
 import type { Session } from '@supabase/supabase-js'
@@ -155,22 +156,15 @@ function AppLayout({ session, savedProfile, setSavedProfile }: {
         <section className="main-card">
           <Routes>
             <Route path="/"          element={<DashboardSection />} />
-            <Route path="/upload"    element={<UploadSection />} />
-            <Route path="/schedule"  element={<ScheduleSection />} />
+            <Route path="/upload"    element={<UploadSection toast={toast} />} />
+            <Route path="/schedule"  element={<ScheduleSection toast={toast} />} />
             <Route path="/analytics" element={<AnalyticsSection />} />
-            {/*
-              FIX 2: when you add SettingsSection, pass savedProfile and onSaveProfile:
-              <Route path="/settings" element={
-                <SettingsSection
-                  savedProfile={savedProfile}
-                  onSaveProfile={setSavedProfile}
-                />
-              } />
-            */}
-            <Route path="/settings" element={
-              <div style={{ padding: 20, color: 'var(--text2)', fontSize: 13 }}>
-                Import SettingsSection and pass savedProfile + onSaveProfile props here.
-              </div>
+            <Route path="/settings"  element={
+              <SettingsSection
+                savedProfile={savedProfile}
+                onSaveProfile={setSavedProfile}
+                toast={toast}
+              />
             } />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
