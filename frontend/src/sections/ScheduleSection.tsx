@@ -1,16 +1,17 @@
-import { useState } from 'react'
- 
+import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
+
 // ─── TYPES ────────────────────────────────────────────────────────────────────
-type Platform = 'Instagram' | 'YouTube' | 'Twitter'
- 
+type Platform = 'instagram' | 'youtube' | 'twitter'
+
 interface ScheduledItem {
-  id: number
+  id: string
   title: string
   platform: Platform
-  date: string
-  time: string
+  scheduled_at: string   // ISO timestamptz from Supabase
+  status: string
 }
- 
+
 interface Form {
   title: string
   platform: Platform
@@ -19,57 +20,57 @@ interface Form {
   fYear: string
   time: string
 }
- 
+
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const MONTHS = [
   'January','February','March','April','May','June',
   'July','August','September','October','November','December',
 ]
 const WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
- 
-const PLAT: Record<Platform, { color: string; bg: string; border: string }> = {
-  Instagram: { color: '#a78bfa', bg: 'rgba(167,139,250,0.1)', border: 'rgba(167,139,250,0.3)' },
-  YouTube:   { color: '#f87171', bg: 'rgba(248,113,113,0.1)', border: 'rgba(248,113,113,0.3)' },
-  Twitter:   { color: '#38bdf8', bg: 'rgba(56,189,248,0.1)',  border: 'rgba(56,189,248,0.3)'  },
+
+const PLAT: Record<Platform, { color: string; bg: string; border: string; label: string }> = {
+  instagram: { color: '#a78bfa', bg: 'rgba(167,139,250,0.1)', border: 'rgba(167,139,250,0.3)', label: 'Instagram' },
+  youtube:   { color: '#f87171', bg: 'rgba(248,113,113,0.1)', border: 'rgba(248,113,113,0.3)', label: 'YouTube'   },
+  twitter:   { color: '#38bdf8', bg: 'rgba(56,189,248,0.1)',  border: 'rgba(56,189,248,0.3)',  label: 'Twitter'   },
 }
- 
-const BEST_TIMES: { platform: Platform; times: string[] }[] = [
+
+const BEST_TIMES: { platform: string; times: string[] }[] = [
   { platform: 'Instagram', times: ['Tue 6–8 PM', 'Fri 12–2 PM', 'Sun 8–10 AM'] },
   { platform: 'YouTube',   times: ['Thu 2–4 PM', 'Sat 10 AM–12 PM'] },
   { platform: 'Twitter',   times: ['Mon 8–10 AM', 'Wed 12–2 PM', 'Fri 9–11 AM'] },
 ]
- 
-// ─── TOAST ────────────────────────────────────────────────────────────────────
-interface ToastMsg { id: number; msg: string; type: 'success' | 'error' | 'info' }
- 
-function useInlineToast() {
-  const [toasts, setToasts] = useState<ToastMsg[]>([])
-  const show = (msg: string, type: ToastMsg['type'] = 'info') => {
-    const id = Date.now()
-    setToasts(t => [...t, { id, msg, type }])
-    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3000)
-  }
-  return { toasts, show }
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+function isoToDateStr(iso: string) {
+  return iso.slice(0, 10)  // 'YYYY-MM-DD'
 }
- 
-// ─── BADGE ────────────────────────────────────────────────────────────────────
-function PlatBadge({ platform }: { platform: Platform }) {
-  const p = PLAT[platform]
+function isoToTimeStr(iso: string) {
+  return iso.slice(11, 16) // 'HH:MM'
+}
+function formatDisplayDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+function Skeleton({ h = 36, r = 8 }: { h?: number; r?: number }) {
   return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center',
-      padding: '2px 8px', borderRadius: 20,
-      fontSize: 10, fontWeight: 600, letterSpacing: '0.05em',
-      fontFamily: 'monospace',
-      color: p.color, background: p.bg, border: `1px solid ${p.border}`,
-    }}>
-      {platform}
+    <div style={{
+      height: h, borderRadius: r,
+      background: 'linear-gradient(90deg, #0d1225, #111827, #0d1225)',
+      backgroundSize: '200% 100%', animation: 'shimmer 1.4s infinite',
+    }} />
+  )
+}
+
+function PlatBadge({ platform }: { platform: Platform }) {
+  const p = PLAT[platform] ?? PLAT.instagram
+  return (
+    <span style={{ display:'inline-flex', alignItems:'center', padding:'2px 8px', borderRadius:20, fontSize:10, fontWeight:600, letterSpacing:'0.05em', fontFamily:'monospace', color:p.color, background:p.bg, border:`1px solid ${p.border}` }}>
+      {p.label}
     </span>
   )
 }
- 
-// ─── ICON ─────────────────────────────────────────────────────────────────────
-function Trash() {
+
+function TrashIcon() {
   return (
     <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="3 6 5 6 21 6"/>
@@ -79,95 +80,26 @@ function Trash() {
     </svg>
   )
 }
- 
-// ─── SHARED STYLE TOKENS ──────────────────────────────────────────────────────
-const S = {
-  card: {
-    background: 'linear-gradient(135deg, rgba(13,18,37,0.95), rgba(8,12,24,0.98))',
-    border: '1px solid rgba(255,255,255,0.06)',
-    borderRadius: 12,
-    padding: 20,
-  } as React.CSSProperties,
- 
-  input: {
-    width: '100%',
-    padding: '9px 13px',
-    borderRadius: 9,
-    background: 'rgba(8,12,24,0.8)',
-    border: '1px solid rgba(255,255,255,0.07)',
-    color: '#e8edf5',
-    fontSize: 13,
-    fontFamily: 'inherit',
-    outline: 'none',
-    boxSizing: 'border-box',
-  } as React.CSSProperties,
- 
-  label: {
-    display: 'block',
-    fontSize: 10,
-    fontWeight: 600,
-    color: '#8892a4',
-    letterSpacing: '0.08em',
-    marginBottom: 6,
-    fontFamily: 'monospace',
-    textTransform: 'uppercase',
-  } as React.CSSProperties,
- 
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: 700,
-    color: '#e8edf5',
-    letterSpacing: '-0.01em',
-  } as React.CSSProperties,
- 
-  btnPrimary: {
-    width: '100%',
-    padding: '10px 0',
-    borderRadius: 9,
-    background: 'linear-gradient(135deg, rgba(99,179,237,0.18), rgba(99,179,237,0.08))',
-    border: '1px solid rgba(99,179,237,0.35)',
-    color: '#63b3ed',
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    transition: 'all 0.15s',
-  } as React.CSSProperties,
- 
-  btnSm: {
-    padding: '5px 10px',
-    borderRadius: 7,
-    background: 'rgba(248,113,113,0.08)',
-    border: '1px solid rgba(248,113,113,0.25)',
-    color: '#f87171',
-    fontSize: 11,
-    fontWeight: 600,
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 4,
-    fontFamily: 'inherit',
-    transition: 'all 0.15s',
-    flexShrink: 0,
-  } as React.CSSProperties,
- 
-  btnNav: {
-    padding: '5px 11px',
-    borderRadius: 7,
-    background: 'rgba(255,255,255,0.04)',
-    border: '1px solid rgba(255,255,255,0.08)',
-    color: '#8892a4',
-    fontSize: 14,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    transition: 'all 0.15s',
-  } as React.CSSProperties,
+
+const C = {
+  bg2: '#0d1225', bg3: '#111827',
+  border: 'rgba(255,255,255,0.06)',
+  text: '#e8edf5', text2: '#8892a4', text3: '#4f5a6e',
+  accent: '#63b3ed', accent2: '#4ade80', accent3: '#f59e0b', danger: '#f87171',
 }
- 
+
+const card: React.CSSProperties = {
+  background: 'linear-gradient(135deg, rgba(13,18,37,0.95), rgba(8,12,24,0.98))',
+  border: `1px solid ${C.border}`, borderRadius: 12, padding: 20,
+}
+
+const baseInput: React.CSSProperties = {
+  width: '100%', padding: '9px 13px', borderRadius: 9,
+  background: 'rgba(8,12,24,0.85)', border: '1px solid rgba(255,255,255,0.07)',
+  color: C.text, fontSize: 13, fontFamily: 'inherit', outline: 'none',
+  boxSizing: 'border-box', transition: 'border-color 0.15s, box-shadow 0.15s',
+}
+
 // ─── SCHEDULE SECTION ─────────────────────────────────────────────────────────
 export function ScheduleSection({
   toast: externalToast,
@@ -175,37 +107,134 @@ export function ScheduleSection({
   toast?: (msg: string, type?: 'success' | 'error' | 'info') => void
 } = {}) {
   const now = new Date()
-  const { toasts, show: inlineShow } = useInlineToast()
-  const toast = externalToast ?? inlineShow
- 
+
+  // ── inline toast fallback
+  const [inlineToasts, setInlineToasts] = useState<{ id: number; msg: string; type: string }[]>([])
+  const inlineToast = (msg: string, type = 'info') => {
+    const id = Date.now()
+    setInlineToasts(t => [...t, { id, msg, type }])
+    setTimeout(() => setInlineToasts(t => t.filter(x => x.id !== id)), 3200)
+  }
+  const toast = externalToast ?? inlineToast
+
+  // ── state
   const [month,    setMonth]    = useState(now.getMonth())
   const [year,     setYear]     = useState(now.getFullYear())
   const [selected, setSelected] = useState<string | null>(null)
- 
-  const [items, setItems] = useState<ScheduledItem[]>([
-    {
-      id: 1, title: 'Morning routine for creators', platform: 'Instagram',
-      date: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2,'0')}-10`,
-      time: '18:00',
-    },
-    {
-      id: 2, title: 'Q&A session highlights', platform: 'YouTube',
-      date: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2,'0')}-14`,
-      time: '15:00',
-    },
-  ])
- 
+  const [items,    setItems]    = useState<ScheduledItem[]>([])
+  const [loading,  setLoading]  = useState(true)
+  const [saving,   setSaving]   = useState(false)
+  const [error,    setError]    = useState<string | null>(null)
+
   const [form, setForm] = useState<Form>({
-    title: '', platform: 'Instagram', day: '', fMonth: '', fYear: '', time: '18:00',
+    title: '', platform: 'instagram', day: '', fMonth: '', fYear: '', time: '18:00',
   })
- 
-  const firstDay    = new Date(year, month, 1).getDay()
-  const daysInMonth = new Date(year, month + 1, 0).getDate()
-  const scheduledDates = new Set(items.map(i => i.date))
- 
+
+  // ── fetch scheduled posts from Supabase on mount
+  useEffect(() => {
+    fetchScheduled()
+  }, [])
+
+  async function fetchScheduled() {
+    setLoading(true); setError(null)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data, error } = await supabase
+        .from('content')
+        .select('id, title, platform, scheduled_at, status')
+        .eq('user_id', user.id)
+        .eq('status', 'scheduled')
+        .not('scheduled_at', 'is', null)
+        .order('scheduled_at', { ascending: true })
+
+      if (error) throw error
+      setItems((data as ScheduledItem[]) ?? [])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load scheduled posts')
+    }
+    setLoading(false)
+  }
+
+  // ── add item → insert into Supabase content table
+  async function addItem() {
+    const d = parseInt(form.day)
+    const m = parseInt(form.fMonth)
+    const y = parseInt(form.fYear)
+
+    if (!form.title.trim()) { toast('Post title is required', 'error'); return }
+    if (
+      !form.day || !form.fMonth || !form.fYear ||
+      isNaN(d) || isNaN(m) || isNaN(y) ||
+      d < 1 || d > 31 || m < 1 || m > 12 || y < 2020 || y > 2100
+    ) { toast('Enter a valid date (day / month / year)', 'error'); return }
+    if (!form.time) { toast('Fill in a time', 'error'); return }
+
+    // Build ISO timestamp: 'YYYY-MM-DDTHH:MM:00+00:00'
+    const dateStr     = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+    const scheduledAt = `${dateStr}T${form.time}:00+00:00`
+
+    setSaving(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+
+      const { data, error } = await supabase
+        .from('content')
+        .insert({
+          user_id:      user.id,
+          title:        form.title.trim(),
+          platform:     form.platform,
+          status:       'scheduled',
+          scheduled_at: scheduledAt,
+        })
+        .select('id, title, platform, scheduled_at, status')
+        .single()
+
+      if (error) throw error
+
+      // Update local state and calendar
+      setItems(prev => [...prev, data as ScheduledItem].sort((a,b) =>
+        new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()
+      ))
+      setMonth(m - 1); setYear(y); setSelected(dateStr)
+      setForm({ title:'', platform:'instagram', day:'', fMonth:'', fYear:'', time:'18:00' })
+      toast('Post scheduled!', 'success')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Failed to schedule post', 'error')
+    }
+    setSaving(false)
+  }
+
+  // ── remove item → update status to 'draft' in Supabase
+  async function removeItem(id: string) {
+    try {
+      const { error } = await supabase
+        .from('content')
+        .update({ status: 'draft', scheduled_at: null })
+        .eq('id', id)
+
+      if (error) throw error
+      setItems(prev => prev.filter(i => i.id !== id))
+      toast('Post unscheduled', 'info')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Failed to remove post', 'error')
+    }
+  }
+
+  // ── calendar helpers
+  const firstDay     = new Date(year, month, 1).getDay()
+  const daysInMonth  = new Date(year, month + 1, 0).getDate()
+
+  // Build set of scheduled dates for the current month view
+  const scheduledDates = new Set(
+    items.map(i => isoToDateStr(i.scheduled_at))
+  )
+
   const fmt = (d: number) =>
     `${year}-${String(month + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`
- 
+
   const prevMonth = () => {
     if (month === 0) { setMonth(11); setYear(y => y - 1) }
     else setMonth(m => m - 1)
@@ -214,51 +243,31 @@ export function ScheduleSection({
     if (month === 11) { setMonth(0); setYear(y => y + 1) }
     else setMonth(m => m + 1)
   }
- 
-  const addItem = () => {
-    const d = parseInt(form.day), m = parseInt(form.fMonth), y = parseInt(form.fYear)
-    if (!form.title.trim()) { toast('Post title is required', 'error'); return }
-    if (!form.day || !form.fMonth || !form.fYear || isNaN(d)||isNaN(m)||isNaN(y)
-      || d<1||d>31||m<1||m>12||y<2020||y>2100) {
-      toast('Enter a valid date (day / month / year)', 'error'); return
-    }
-    if (!form.time) { toast('Fill in a time', 'error'); return }
- 
-    const dateStr = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`
-    setItems(prev => [...prev, { id: Date.now(), title: form.title.trim(), platform: form.platform, date: dateStr, time: form.time }])
-    setMonth(m - 1); setYear(y); setSelected(dateStr)
-    setForm({ title: '', platform: 'Instagram', day: '', fMonth: '', fYear: '', time: '18:00' })
-    toast('Post scheduled!', 'success')
-  }
- 
-  const removeItem = (id: number) => {
-    setItems(prev => prev.filter(i => i.id !== id))
-    toast('Post removed', 'info')
-  }
- 
-  const selectedItems = selected ? items.filter(i => i.date === selected) : []
- 
+
+  const selectedItems = selected
+    ? items.filter(i => isoToDateStr(i.scheduled_at) === selected)
+    : []
+
   return (
     <div style={{ animation: 'fadeIn 0.3s ease' }}>
       <style>{`
-        @keyframes fadeIn { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:translateY(0) } }
-        @keyframes slideIn { from { transform:translateX(16px); opacity:0 } to { transform:translateX(0); opacity:1 } }
-        .cal-cell:hover { background: rgba(99,179,237,0.08) !important; border-color: rgba(99,179,237,0.2) !important; color: #e8edf5 !important; }
-        .sched-row:hover { background: rgba(255,255,255,0.02); }
-        .nav-btn:hover { background: rgba(255,255,255,0.08) !important; color: #e8edf5 !important; }
-        .del-btn:hover { background: rgba(248,113,113,0.15) !important; border-color: rgba(248,113,113,0.4) !important; }
-        .primary-btn:hover { box-shadow: 0 0 20px rgba(99,179,237,0.15); border-color: rgba(99,179,237,0.55) !important; }
-        .sched-input:focus { border-color: rgba(99,179,237,0.4) !important; box-shadow: 0 0 0 3px rgba(99,179,237,0.07) !important; }
-        select option { background: #0d1225; color: #e8edf5; }
+        @keyframes fadeIn  { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+        .cal-cell:hover    { background:rgba(99,179,237,0.08) !important; border-color:rgba(99,179,237,0.2) !important; color:#e8edf5 !important; }
+        .sched-row:hover   { background:rgba(255,255,255,0.02); }
+        .nav-btn:hover     { background:rgba(255,255,255,0.08) !important; color:#e8edf5 !important; }
+        .del-btn:hover     { background:rgba(248,113,113,0.15) !important; border-color:rgba(248,113,113,0.4) !important; }
+        .primary-btn:hover { box-shadow:0 0 20px rgba(99,179,237,0.15); border-color:rgba(99,179,237,0.6) !important; }
+        .sc-input:focus    { border-color:rgba(99,179,237,0.4) !important; box-shadow:0 0 0 3px rgba(99,179,237,0.07) !important; }
+        select option      { background:#0d1225; color:#e8edf5; }
       `}</style>
- 
+
       {/* Inline toasts */}
       {!externalToast && (
         <div style={{ position:'fixed', bottom:24, right:24, zIndex:999, display:'flex', flexDirection:'column', gap:8 }}>
-          {toasts.map(t => (
+          {inlineToasts.map(t => (
             <div key={t.id} style={{
-              padding:'10px 16px', borderRadius:10, fontSize:12, fontWeight:500,
-              border:'1px solid', maxWidth:300, animation:'slideIn 0.25s ease',
+              padding:'10px 16px', borderRadius:10, fontSize:12, fontWeight:500, border:'1px solid', maxWidth:300,
               background:  t.type==='success'?'rgba(74,222,128,0.1)' :t.type==='error'?'rgba(248,113,113,0.1)' :'rgba(99,179,237,0.1)',
               borderColor: t.type==='success'?'rgba(74,222,128,0.3)' :t.type==='error'?'rgba(248,113,113,0.3)' :'rgba(99,179,237,0.3)',
               color:       t.type==='success'?'#4ade80'               :t.type==='error'?'#f87171'               :'#63b3ed',
@@ -268,75 +277,58 @@ export function ScheduleSection({
           ))}
         </div>
       )}
- 
+
+      {/* Error banner */}
+      {error && (
+        <div style={{ marginBottom:16, padding:'10px 14px', borderRadius:9, background:'rgba(248,113,113,0.08)', border:'1px solid rgba(248,113,113,0.25)', color:C.danger, fontSize:12, fontFamily:'monospace' }}>
+          ⚠ {error}
+        </div>
+      )}
+
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20, alignItems:'start' }}>
- 
-        {/* ══ LEFT: Calendar ═══════════════════════════════════════════════════ */}
+
+        {/* ══ LEFT: Calendar ══════════════════════════════════════════════════ */}
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-          <div style={S.card}>
- 
+          <div style={card}>
             {/* Month nav */}
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:18 }}>
-              <button className="nav-btn" style={S.btnNav} onClick={prevMonth}>←</button>
-              <div style={{ fontWeight:700, fontSize:14, color:'#e8edf5' }}>{MONTHS[month]} {year}</div>
-              <button className="nav-btn" style={S.btnNav} onClick={nextMonth}>→</button>
+              <button className="nav-btn" onClick={prevMonth} style={{ padding:'5px 11px', borderRadius:7, background:'rgba(255,255,255,0.04)', border:`1px solid ${C.border}`, color:C.text2, fontSize:14, cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s' }}>←</button>
+              <div style={{ fontWeight:700, fontSize:14, color:C.text }}>{MONTHS[month]} {year}</div>
+              <button className="nav-btn" onClick={nextMonth} style={{ padding:'5px 11px', borderRadius:7, background:'rgba(255,255,255,0.04)', border:`1px solid ${C.border}`, color:C.text2, fontSize:14, cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s' }}>→</button>
             </div>
- 
+
             {/* Weekday headers */}
             <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:3, marginBottom:6 }}>
               {WEEKDAYS.map(d => (
-                <div key={d} style={{ textAlign:'center', fontSize:9, fontWeight:600, color:'#4f5a6e', fontFamily:'monospace', letterSpacing:'0.1em', padding:'4px 0' }}>
-                  {d}
-                </div>
+                <div key={d} style={{ textAlign:'center', fontSize:9, fontWeight:600, color:C.text3, fontFamily:'monospace', letterSpacing:'0.1em', padding:'4px 0' }}>{d}</div>
               ))}
             </div>
- 
+
             {/* Day cells */}
             <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:3 }}>
-              {/* Empty leading cells */}
               {Array.from({ length: firstDay }).map((_, i) => (
                 <div key={`e${i}`} style={{ aspectRatio:'1' }} />
               ))}
- 
               {Array.from({ length: daysInMonth }).map((_, i) => {
                 const d       = i + 1
                 const dateStr = fmt(d)
                 const isToday = d === now.getDate() && month === now.getMonth() && year === now.getFullYear()
                 const hasPost = scheduledDates.has(dateStr)
                 const isSel   = selected === dateStr
- 
-                const cellStyle: React.CSSProperties = {
-                  aspectRatio: '1',
-                  borderRadius: 8,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  position: 'relative',
-                  gap: 3,
-                  transition: 'all 0.12s',
-                  border: '1px solid transparent',
-                  color: isSel ? '#63b3ed' : isToday ? '#63b3ed' : '#8892a4',
-                  background: isSel
-                    ? 'rgba(99,179,237,0.14)'
-                    : isToday
-                    ? 'rgba(99,179,237,0.06)'
-                    : 'transparent',
-                  borderColor: isSel
-                    ? '#63b3ed'
-                    : isToday
-                    ? 'rgba(99,179,237,0.35)'
-                    : 'transparent',
-                }
- 
+
                 return (
                   <div
                     key={d}
                     className="cal-cell"
-                    style={cellStyle}
+                    style={{
+                      aspectRatio:'1', borderRadius:8, display:'flex', flexDirection:'column',
+                      alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:600,
+                      cursor:'pointer', position:'relative', gap:3, transition:'all 0.12s',
+                      border:'1px solid transparent',
+                      color:   isSel ? '#63b3ed' : isToday ? '#63b3ed' : C.text2,
+                      background: isSel ? 'rgba(99,179,237,0.14)' : isToday ? 'rgba(99,179,237,0.06)' : 'transparent',
+                      borderColor: isSel ? '#63b3ed' : isToday ? 'rgba(99,179,237,0.35)' : 'transparent',
+                    }}
                     onClick={() => {
                       const toggling = isSel
                       setSelected(toggling ? null : dateStr)
@@ -346,57 +338,53 @@ export function ScheduleSection({
                     }}
                   >
                     <span>{d}</span>
-                    {hasPost && (
-                      <div style={{ width:4, height:4, borderRadius:'50%', background:'#4ade80', position:'absolute', bottom:4 }} />
-                    )}
+                    {hasPost && <div style={{ width:4, height:4, borderRadius:'50%', background:C.accent2, position:'absolute', bottom:4 }} />}
                   </div>
                 )
               })}
             </div>
- 
+
             {/* Legend */}
-            <div style={{ display:'flex', gap:12, marginTop:14, paddingTop:14, borderTop:'1px solid rgba(255,255,255,0.05)' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:10, color:'#4f5a6e' }}>
-                <div style={{ width:8, height:8, borderRadius:2, background:'rgba(99,179,237,0.2)', border:'1px solid rgba(99,179,237,0.5)' }} />
-                Today
-              </div>
-              <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:10, color:'#4f5a6e' }}>
-                <div style={{ width:6, height:6, borderRadius:'50%', background:'#4ade80' }} />
-                Has post
-              </div>
-              <div style={{ display:'flex', alignItems:'center', gap:5, fontSize:10, color:'#4f5a6e' }}>
-                <div style={{ width:8, height:8, borderRadius:2, background:'rgba(99,179,237,0.14)', border:'1px solid #63b3ed' }} />
-                Selected
-              </div>
+            <div style={{ display:'flex', gap:12, marginTop:14, paddingTop:14, borderTop:`1px solid rgba(255,255,255,0.05)` }}>
+              {[
+                { color:'rgba(99,179,237,0.2)', border:'rgba(99,179,237,0.5)', label:'Today' },
+                { color:'#4ade80',              border:'none',                  label:'Has post', dot:true },
+                { color:'rgba(99,179,237,0.14)', border:'#63b3ed',             label:'Selected' },
+              ].map((l, i) => (
+                <div key={i} style={{ display:'flex', alignItems:'center', gap:5, fontSize:10, color:C.text3 }}>
+                  {l.dot
+                    ? <div style={{ width:6, height:6, borderRadius:'50%', background:l.color }} />
+                    : <div style={{ width:8, height:8, borderRadius:2, background:l.color, border:`1px solid ${l.border}` }} />
+                  }
+                  {l.label}
+                </div>
+              ))}
             </div>
           </div>
- 
-          {/* Selected day detail */}
+
+          {/* Selected day popup */}
           {selected && (
-            <div style={{ ...S.card, animation:'fadeIn 0.2s ease' }}>
+            <div style={{ ...card, animation:'fadeIn 0.2s ease' }}>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
-                <span style={{ fontSize:11, color:'#4f5a6e', fontFamily:'monospace' }}>{selected}</span>
-                <span style={{ fontSize:11, color:'#4f5a6e' }}>
-                  {selectedItems.length} post{selectedItems.length !== 1 ? 's' : ''}
-                </span>
+                <span style={{ fontSize:11, color:C.text3, fontFamily:'monospace' }}>{selected}</span>
+                <span style={{ fontSize:11, color:C.text3 }}>{selectedItems.length} post{selectedItems.length!==1?'s':''}</span>
               </div>
- 
               {selectedItems.length === 0 ? (
-                <div style={{ textAlign:'center', padding:'20px 0', fontSize:13, color:'#4f5a6e' }}>
+                <div style={{ textAlign:'center', padding:'20px 0', fontSize:13, color:C.text3 }}>
                   No posts this day — fill the form →
                 </div>
               ) : (
                 selectedItems.map(item => (
-                  <div key={item.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 0', borderBottom:'1px solid rgba(255,255,255,0.05)' }}>
+                  <div key={item.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 0', borderBottom:`1px solid rgba(255,255,255,0.05)` }}>
                     <div style={{ flex:1 }}>
-                      <div style={{ fontSize:13, fontWeight:600, color:'#e8edf5', marginBottom:4 }}>{item.title}</div>
+                      <div style={{ fontSize:13, fontWeight:600, color:C.text, marginBottom:4 }}>{item.title}</div>
                       <div style={{ display:'flex', gap:6, alignItems:'center' }}>
                         <PlatBadge platform={item.platform} />
-                        <span style={{ fontSize:10, color:'#4f5a6e', fontFamily:'monospace' }}>{item.time}</span>
+                        <span style={{ fontSize:10, color:C.text3, fontFamily:'monospace' }}>{isoToTimeStr(item.scheduled_at)}</span>
                       </div>
                     </div>
-                    <button className="del-btn" style={S.btnSm} onClick={() => removeItem(item.id)}>
-                      <Trash />
+                    <button className="del-btn" onClick={() => removeItem(item.id)} style={{ padding:'5px 10px', borderRadius:7, border:'1px solid rgba(248,113,113,0.25)', background:'rgba(248,113,113,0.08)', color:C.danger, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit', display:'inline-flex', alignItems:'center', gap:4, transition:'all 0.15s', flexShrink:0 }}>
+                      <TrashIcon />
                     </button>
                   </div>
                 ))
@@ -404,137 +392,110 @@ export function ScheduleSection({
             </div>
           )}
         </div>
- 
-        {/* ══ RIGHT: Form + Best Times + All Posts ═════════════════════════════ */}
+
+        {/* ══ RIGHT: Form + Best Times + All Scheduled ════════════════════════ */}
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
- 
-          {/* Form */}
-          <div style={S.card}>
-            <div style={{ ...S.sectionTitle, marginBottom:18 }}>Schedule New Post</div>
- 
-            {/* Title */}
+
+          {/* Schedule form */}
+          <div style={card}>
+            <div style={{ fontSize:14, fontWeight:700, color:C.text, marginBottom:18 }}>Schedule New Post</div>
+
             <div style={{ marginBottom:14 }}>
-              <label style={S.label}>Post Title</label>
-              <input
-                className="sched-input"
-                style={S.input}
-                placeholder="What's this post about?"
-                value={form.title}
-                onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-              />
+              <div style={{ fontSize:10, fontWeight:600, color:C.text2, letterSpacing:'0.08em', marginBottom:6, fontFamily:'monospace', textTransform:'uppercase' }}>Post Title</div>
+              <input className="sc-input" style={baseInput} placeholder="What's this post about?" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
             </div>
- 
-            {/* Platform */}
+
             <div style={{ marginBottom:14 }}>
-              <label style={S.label}>Platform</label>
-              <select
-                className="sched-input"
-                style={{ ...S.input, appearance:'none', cursor:'pointer' } as React.CSSProperties}
-                value={form.platform}
-                onChange={e => setForm(f => ({ ...f, platform: e.target.value as Platform }))}
-              >
-                {(['Instagram','YouTube','Twitter'] as Platform[]).map(p => (
-                  <option key={p}>{p}</option>
+              <div style={{ fontSize:10, fontWeight:600, color:C.text2, letterSpacing:'0.08em', marginBottom:6, fontFamily:'monospace', textTransform:'uppercase' }}>Platform</div>
+              <select className="sc-input" style={{ ...baseInput, appearance:'none', cursor:'pointer' } as React.CSSProperties} value={form.platform} onChange={e => setForm(f => ({ ...f, platform: e.target.value as Platform }))}>
+                {(['instagram','youtube','twitter'] as Platform[]).map(p => (
+                  <option key={p} value={p}>{PLAT[p].label}</option>
                 ))}
               </select>
             </div>
- 
-            {/* Date inputs */}
+
             <div style={{ marginBottom:14 }}>
-              <label style={S.label}>Date</label>
+              <div style={{ fontSize:10, fontWeight:600, color:C.text2, letterSpacing:'0.08em', marginBottom:6, fontFamily:'monospace', textTransform:'uppercase' }}>Date</div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1.4fr', gap:8 }}>
-                <div>
-                  <div style={{ fontSize:10, color:'#4f5a6e', marginBottom:4, fontFamily:'monospace' }}>DD</div>
-                  <input
-                    className="sched-input"
-                    style={S.input}
-                    placeholder="dd"
-                    maxLength={2}
-                    value={form.day}
-                    onChange={e => setForm(f => ({ ...f, day: e.target.value.replace(/\D/g,'').slice(0,2) }))}
-                  />
-                </div>
-                <div>
-                  <div style={{ fontSize:10, color:'#4f5a6e', marginBottom:4, fontFamily:'monospace' }}>MM</div>
-                  <input
-                    className="sched-input"
-                    style={S.input}
-                    placeholder="mm"
-                    maxLength={2}
-                    value={form.fMonth}
-                    onChange={e => setForm(f => ({ ...f, fMonth: e.target.value.replace(/\D/g,'').slice(0,2) }))}
-                  />
-                </div>
-                <div>
-                  <div style={{ fontSize:10, color:'#4f5a6e', marginBottom:4, fontFamily:'monospace' }}>YYYY</div>
-                  <input
-                    className="sched-input"
-                    style={S.input}
-                    placeholder="yyyy"
-                    maxLength={4}
-                    value={form.fYear}
-                    onChange={e => setForm(f => ({ ...f, fYear: e.target.value.replace(/\D/g,'').slice(0,4) }))}
-                  />
-                </div>
+                {[
+                  { label:'DD', key:'day',    placeholder:'dd', max:2  },
+                  { label:'MM', key:'fMonth', placeholder:'mm', max:2  },
+                  { label:'YYYY', key:'fYear', placeholder:'yyyy', max:4 },
+                ].map(f => (
+                  <div key={f.key}>
+                    <div style={{ fontSize:10, color:C.text3, marginBottom:4, fontFamily:'monospace' }}>{f.label}</div>
+                    <input
+                      className="sc-input"
+                      style={baseInput}
+                      placeholder={f.placeholder}
+                      maxLength={f.max}
+                      value={(form as Record<string,string>)[f.key]}
+                      onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value.replace(/\D/g,'').slice(0,f.max) }))}
+                    />
+                  </div>
+                ))}
               </div>
             </div>
- 
-            {/* Time */}
+
             <div style={{ marginBottom:18 }}>
-              <label style={S.label}>Time</label>
-              <input
-                className="sched-input"
-                style={{ ...S.input, width:'auto' }}
-                type="time"
-                value={form.time}
-                onChange={e => setForm(f => ({ ...f, time: e.target.value }))}
-              />
+              <div style={{ fontSize:10, fontWeight:600, color:C.text2, letterSpacing:'0.08em', marginBottom:6, fontFamily:'monospace', textTransform:'uppercase' }}>Time</div>
+              <input className="sc-input" style={{ ...baseInput, width:'auto' }} type="time" value={form.time} onChange={e => setForm(f => ({ ...f, time: e.target.value }))} />
             </div>
- 
-            <button className="primary-btn" style={S.btnPrimary} onClick={addItem}>
-              + Add to Schedule
+
+            <button
+              className="primary-btn"
+              onClick={addItem}
+              disabled={saving}
+              style={{
+                width:'100%', padding:'11px 0', borderRadius:9,
+                background:'linear-gradient(135deg, rgba(99,179,237,0.18), rgba(99,179,237,0.08))',
+                border:'1px solid rgba(99,179,237,0.35)', color:'#63b3ed',
+                fontSize:13, fontWeight:600,
+                cursor: saving ? 'not-allowed' : 'pointer',
+                opacity: saving ? 0.6 : 1,
+                fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:8, transition:'all 0.15s',
+              }}
+            >
+              {saving ? 'Saving…' : '+ Add to Schedule'}
             </button>
           </div>
- 
+
           {/* Best times */}
-          <div style={S.card}>
-            <div style={{ ...S.sectionTitle, marginBottom:4 }}>Best Times to Post</div>
-            <div style={{ fontSize:11, color:'#4f5a6e', marginBottom:16 }}>Based on your audience engagement patterns</div>
- 
-            {BEST_TIMES.map((p, i) => (
-              <div key={i} style={{ marginBottom: i < BEST_TIMES.length - 1 ? 14 : 0 }}>
-                <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:7 }}>
-                  <div style={{ width:7, height:7, borderRadius:'50%', background: PLAT[p.platform].color }} />
-                  <span style={{ fontSize:11, fontWeight:600, color: PLAT[p.platform].color, fontFamily:'monospace' }}>
-                    {p.platform}
-                  </span>
+          <div style={card}>
+            <div style={{ fontSize:14, fontWeight:700, color:C.text, marginBottom:4 }}>Best Times to Post</div>
+            <div style={{ fontSize:11, color:C.text3, marginBottom:16 }}>Based on your audience engagement patterns</div>
+            {BEST_TIMES.map((p, i) => {
+              const platKey = p.platform.toLowerCase() as Platform
+              const platStyle = PLAT[platKey] ?? PLAT.instagram
+              return (
+                <div key={i} style={{ marginBottom: i < BEST_TIMES.length-1 ? 14 : 0 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:7 }}>
+                    <div style={{ width:7, height:7, borderRadius:'50%', background:platStyle.color }} />
+                    <span style={{ fontSize:11, fontWeight:600, color:platStyle.color, fontFamily:'monospace' }}>{p.platform}</span>
+                  </div>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+                    {p.times.map(t => (
+                      <span key={t} style={{ fontSize:10, padding:'3px 9px', borderRadius:20, color:platStyle.color, background:platStyle.bg, border:`1px solid ${platStyle.border}`, fontFamily:'monospace' }}>{t}</span>
+                    ))}
+                  </div>
                 </div>
-                <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
-                  {p.times.map(t => (
-                    <span key={t} style={{
-                      fontSize:10, padding:'3px 9px', borderRadius:20,
-                      color: PLAT[p.platform].color,
-                      background: PLAT[p.platform].bg,
-                      border: `1px solid ${PLAT[p.platform].border}`,
-                      fontFamily:'monospace',
-                    }}>{t}</span>
-                  ))}
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
- 
+
           {/* All scheduled posts */}
-          <div style={S.card}>
+          <div style={card}>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
-              <div style={S.sectionTitle}>All Scheduled Posts</div>
-              <span style={{ fontSize:11, color:'#4f5a6e', fontFamily:'monospace' }}>
-                {items.length} post{items.length !== 1 ? 's' : ''}
-              </span>
+              <div style={{ fontSize:14, fontWeight:700, color:C.text }}>All Scheduled Posts</div>
+              <span style={{ fontSize:11, color:C.text3, fontFamily:'monospace' }}>{items.length} post{items.length!==1?'s':''}</span>
             </div>
- 
-            {items.length === 0 ? (
-              <div style={{ textAlign:'center', padding:'24px 0', fontSize:13, color:'#4f5a6e' }}>
+
+            {loading ? (
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                {Array.from({length:3}).map((_,i) => <Skeleton key={i} />)}
+              </div>
+            ) : items.length === 0 ? (
+              <div style={{ textAlign:'center', padding:'24px 0', fontSize:13, color:C.text3 }}>
                 No scheduled posts yet
               </div>
             ) : (
@@ -543,26 +504,22 @@ export function ScheduleSection({
                   key={item.id}
                   className="sched-row"
                   style={{
-                    display:'flex', alignItems:'center', gap:12,
-                    padding:'11px 8px',
-                    borderBottom: idx < items.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
-                    borderRadius:6,
-                    transition:'background 0.12s',
+                    display:'flex', alignItems:'center', gap:12, padding:'11px 8px',
+                    borderBottom: idx < items.length-1 ? `1px solid rgba(255,255,255,0.04)` : 'none',
+                    borderRadius:6, transition:'background 0.12s',
                   }}
                 >
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontSize:13, fontWeight:600, color:'#e8edf5', marginBottom:5, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-                      {item.title}
-                    </div>
+                    <div style={{ fontSize:13, fontWeight:600, color:C.text, marginBottom:5, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{item.title}</div>
                     <div style={{ display:'flex', gap:6, alignItems:'center' }}>
                       <PlatBadge platform={item.platform} />
-                      <span style={{ fontSize:10, color:'#4f5a6e', fontFamily:'monospace' }}>
-                        {item.date} · {item.time}
+                      <span style={{ fontSize:10, color:C.text3, fontFamily:'monospace' }}>
+                        {formatDisplayDate(item.scheduled_at)} · {isoToTimeStr(item.scheduled_at)}
                       </span>
                     </div>
                   </div>
-                  <button className="del-btn" style={S.btnSm} onClick={() => removeItem(item.id)}>
-                    <Trash />
+                  <button className="del-btn" onClick={() => removeItem(item.id)} style={{ padding:'5px 10px', borderRadius:7, border:'1px solid rgba(248,113,113,0.25)', background:'rgba(248,113,113,0.08)', color:C.danger, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit', display:'inline-flex', alignItems:'center', gap:4, transition:'all 0.15s', flexShrink:0 }}>
+                    <TrashIcon />
                   </button>
                 </div>
               ))
