@@ -12,22 +12,61 @@ type Tone =
   | 'Educational & clear'
  
 // ─── AI HELPER ────────────────────────────────────────────────────────────────
-async function callAI(prompt: string, systemPrompt = '') {
+// async function callAI(prompt: string, systemPrompt = '') {
+//   const apiKey = import.meta.env.VITE_GROQ_API_KEY
+//   if (!apiKey) throw new Error('VITE_GROQ_API_KEY is missing. Add it to your .env file.')
+//   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+//     method: 'POST',
+//     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+//     body: JSON.stringify({
+//       model: 'llama-3.1-8b-instant',
+//       max_tokens: 1024,
+//       temperature: 0.8,
+//       messages: [{ role: 'user', content: systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt }],
+//     }),
+//   })
+//   const data = await res.json()
+//   if (!res.ok) throw new Error(data?.error?.message || `Groq API error: ${res.status}`)
+//   return data.choices?.[0]?.message?.content || ''
+// }
+
+
+async function callAI(description: string, platform: string, tone: string) {
   const apiKey = import.meta.env.VITE_GROQ_API_KEY
-  if (!apiKey) throw new Error('VITE_GROQ_API_KEY is missing. Add it to your .env file.')
+  if (!apiKey) throw new Error('VITE_GROQ_API_KEY is missing from .env')
+
+  const prompt = `Generate social media content for a ${platform} post.\n\nVideo description: "${description}"\nTone: ${tone}\nPlatform: ${platform}\n\nRespond in EXACTLY this format:\nCAPTION:\n[Write a compelling caption here with emojis, 2-4 sentences]\n\nHASHTAGS:\n[List 12-18 hashtags starting with #, space-separated]`
+
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
     body: JSON.stringify({
       model: 'llama-3.1-8b-instant',
       max_tokens: 1024,
       temperature: 0.8,
-      messages: [{ role: 'user', content: systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt }],
+      messages: [
+        { role: 'system', content: `You are an expert ${platform} content strategist. Always respond strictly in the requested CAPTION/HASHTAGS format.` },
+        { role: 'user', content: prompt },
+      ],
     }),
   })
+
   const data = await res.json()
-  if (!res.ok) throw new Error(data?.error?.message || `Groq API error: ${res.status}`)
-  return data.choices?.[0]?.message?.content || ''
+  if (!res.ok) throw new Error(data?.error?.message || `Groq error: ${res.status}`)
+
+  const result = data.choices?.[0]?.message?.content || ''
+  const captionMatch = result.match(/CAPTION:\s*\n([\s\S]*?)(?=\n\s*HASHTAGS:)/i)
+  const hashtagMatch = result.match(/HASHTAGS:\s*\n([\s\S]*?)$/i)
+
+  return {
+    caption:  captionMatch?.[1]?.trim() ?? result.trim(),
+    hashtags: hashtagMatch
+      ? hashtagMatch[1].trim().split(/[\s,\n]+/).filter((t: string) => t.startsWith('#'))
+      : [],
+  }
 }
  
 // ─── DESIGN TOKENS ────────────────────────────────────────────────────────────
@@ -153,36 +192,51 @@ export function UploadSection({
     setDescription(''); setStep(1); setCopied(false)
   }
  
+  // const generateAI = async () => {
+  //   if (!description.trim()) { toast('Add a description first', 'error'); return }
+  //   setAiLoading(true); setCaption(''); setHashtags([])
+  //   try {
+  //     const prompt = `Generate social media content for a ${platform} post.\n\nVideo description: "${description}"\nTone: ${tone}\nPlatform: ${platform}\n\nRespond in EXACTLY this format:\nCAPTION:\n[Write a compelling caption here with emojis, 2-4 sentences]\n\nHASHTAGS:\n[List 12-18 hashtags starting with #, space-separated]`
+  //     const result = await callAI(
+  //       prompt,
+  //       `You are an expert ${platform} content strategist. Always respond strictly in the requested CAPTION/HASHTAGS format.`
+  //     )
+  //     const captionMatch = result.match(/CAPTION:\s*\n([\s\S]*?)(?=\n\s*HASHTAGS:)/i)
+  //     const hashtagMatch = result.match(/HASHTAGS:\s*\n([\s\S]*?)$/i)
+  //     const parsedCaption = captionMatch?.[1]?.trim() ?? ''
+  //     const parsedTags    = hashtagMatch
+  //       ? hashtagMatch[1].trim().split(/[\s,\n]+/).filter((t: string) => t.startsWith('#'))
+  //       : []
+  //     if (parsedCaption) {
+  //       setCaption(parsedCaption); setHashtags(parsedTags); setStep(3)
+  //       toast('AI content generated!', 'success')
+  //     } else if (result.trim()) {
+  //       setCaption(result.trim()); setStep(3)
+  //       toast('Content generated!', 'success')
+  //     } else {
+  //       toast('AI returned empty content — try again', 'error')
+  //     }
+  //   } catch (err) {
+  //     toast(`Error: ${err instanceof Error ? err.message : String(err)}`, 'error')
+  //   }
+  //   setAiLoading(false)
+  // }
+
   const generateAI = async () => {
     if (!description.trim()) { toast('Add a description first', 'error'); return }
     setAiLoading(true); setCaption(''); setHashtags([])
     try {
-      const prompt = `Generate social media content for a ${platform} post.\n\nVideo description: "${description}"\nTone: ${tone}\nPlatform: ${platform}\n\nRespond in EXACTLY this format:\nCAPTION:\n[Write a compelling caption here with emojis, 2-4 sentences]\n\nHASHTAGS:\n[List 12-18 hashtags starting with #, space-separated]`
-      const result = await callAI(
-        prompt,
-        `You are an expert ${platform} content strategist. Always respond strictly in the requested CAPTION/HASHTAGS format.`
-      )
-      const captionMatch = result.match(/CAPTION:\s*\n([\s\S]*?)(?=\n\s*HASHTAGS:)/i)
-      const hashtagMatch = result.match(/HASHTAGS:\s*\n([\s\S]*?)$/i)
-      const parsedCaption = captionMatch?.[1]?.trim() ?? ''
-      const parsedTags    = hashtagMatch
-        ? hashtagMatch[1].trim().split(/[\s,\n]+/).filter((t: string) => t.startsWith('#'))
-        : []
-      if (parsedCaption) {
-        setCaption(parsedCaption); setHashtags(parsedTags); setStep(3)
-        toast('AI content generated!', 'success')
-      } else if (result.trim()) {
-        setCaption(result.trim()); setStep(3)
-        toast('Content generated!', 'success')
-      } else {
-        toast('AI returned empty content — try again', 'error')
-      }
+      const result = await callAI(description, platform, tone)
+      setCaption(result.caption)
+      setHashtags(result.hashtags)
+      setStep(3)
+      toast('AI content generated!', 'success')
     } catch (err) {
       toast(`Error: ${err instanceof Error ? err.message : String(err)}`, 'error')
     }
     setAiLoading(false)
   }
- 
+  
   const handleUpload = async () => {
     if (!file) { toast('Select a video first', 'error'); return }
     setUploading(true)
