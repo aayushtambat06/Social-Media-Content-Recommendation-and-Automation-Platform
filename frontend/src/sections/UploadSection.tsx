@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { apiFetch } from '../lib/api'
  
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 type Platform = 'Instagram' | 'YouTube' | 'Twitter'
@@ -31,42 +32,12 @@ type Tone =
 // }
 
 
+// ─── AI HELPER — calls backend instead of Groq directly ──────────────────────
 async function callAI(description: string, platform: string, tone: string) {
-  const apiKey = import.meta.env.VITE_GROQ_API_KEY
-  if (!apiKey) throw new Error('VITE_GROQ_API_KEY is missing from .env')
-
-  const prompt = `Generate social media content for a ${platform} post.\n\nVideo description: "${description}"\nTone: ${tone}\nPlatform: ${platform}\n\nRespond in EXACTLY this format:\nCAPTION:\n[Write a compelling caption here with emojis, 2-4 sentences]\n\nHASHTAGS:\n[List 12-18 hashtags starting with #, space-separated]`
-
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+  return apiFetch('/api/ai/generate', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'llama-3.1-8b-instant',
-      max_tokens: 1024,
-      temperature: 0.8,
-      messages: [
-        { role: 'system', content: `You are an expert ${platform} content strategist. Always respond strictly in the requested CAPTION/HASHTAGS format.` },
-        { role: 'user', content: prompt },
-      ],
-    }),
+    body: JSON.stringify({ description, platform: platform.toLowerCase(), tone }),
   })
-
-  const data = await res.json()
-  if (!res.ok) throw new Error(data?.error?.message || `Groq error: ${res.status}`)
-
-  const result = data.choices?.[0]?.message?.content || ''
-  const captionMatch = result.match(/CAPTION:\s*\n([\s\S]*?)(?=\n\s*HASHTAGS:)/i)
-  const hashtagMatch = result.match(/HASHTAGS:\s*\n([\s\S]*?)$/i)
-
-  return {
-    caption:  captionMatch?.[1]?.trim() ?? result.trim(),
-    hashtags: hashtagMatch
-      ? hashtagMatch[1].trim().split(/[\s,\n]+/).filter((t: string) => t.startsWith('#'))
-      : [],
-  }
 }
  
 // ─── DESIGN TOKENS ────────────────────────────────────────────────────────────
