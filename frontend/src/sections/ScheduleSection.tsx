@@ -8,11 +8,18 @@ interface ScheduledItem {
   id: string
   title: string
   platform: Platform
-  scheduled_at: string   // ISO timestamptz from Supabase
+  scheduled_at: string   
   status: string
 }
 
+interface DraftItem {
+  id: string
+  title: string
+  platform: Platform
+}
+
 interface Form {
+  draftId: string
   title: string
   platform: Platform
   day: string
@@ -34,19 +41,15 @@ const PLAT: Record<Platform, { color: string; bg: string; border: string; label:
   twitter:   { color: '#38bdf8', bg: 'rgba(56,189,248,0.1)',  border: 'rgba(56,189,248,0.3)',  label: 'Twitter'   },
 }
 
-const BEST_TIMES: { platform: string; times: string[] }[] = [
+const BEST_TIMES = [
   { platform: 'Instagram', times: ['Tue 6–8 PM', 'Fri 12–2 PM', 'Sun 8–10 AM'] },
   { platform: 'YouTube',   times: ['Thu 2–4 PM', 'Sat 10 AM–12 PM'] },
   { platform: 'Twitter',   times: ['Mon 8–10 AM', 'Wed 12–2 PM', 'Fri 9–11 AM'] },
 ]
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
-function isoToDateStr(iso: string) {
-  return iso.slice(0, 10)  // 'YYYY-MM-DD'
-}
-function isoToTimeStr(iso: string) {
-  return iso.slice(11, 16) // 'HH:MM'
-}
+function isoToDateStr(iso: string) { return iso.slice(0, 10) }
+function isoToTimeStr(iso: string) { return iso.slice(11, 16) }
 function formatDisplayDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
@@ -108,7 +111,6 @@ export function ScheduleSection({
 } = {}) {
   const now = new Date()
 
-  // ── inline toast fallback
   const [inlineToasts, setInlineToasts] = useState<{ id: number; msg: string; type: string }[]>([])
   const inlineToast = (msg: string, type = 'info') => {
     const id = Date.now()
@@ -117,31 +119,31 @@ export function ScheduleSection({
   }
   const toast = externalToast ?? inlineToast
 
-  // ── state
   const [month,    setMonth]    = useState(now.getMonth())
   const [year,     setYear]     = useState(now.getFullYear())
   const [selected, setSelected] = useState<string | null>(null)
   const [items,    setItems]    = useState<ScheduledItem[]>([])
+  const [drafts,   setDrafts]   = useState<DraftItem[]>([]) // 👈 NEW STATE FOR DRAFTS
   const [loading,  setLoading]  = useState(true)
   const [saving,   setSaving]   = useState(false)
   const [error,    setError]    = useState<string | null>(null)
 
   const [form, setForm] = useState<Form>({
-    title: '', platform: 'instagram', day: '', fMonth: '', fYear: '', time: '18:00',
+    draftId: '', title: '', platform: 'youtube', day: '', fMonth: '', fYear: '', time: '18:00',
   })
 
-  // ── fetch scheduled posts from Supabase on mount
   useEffect(() => {
-    fetchScheduled()
+    fetchData()
   }, [])
 
-  async function fetchScheduled() {
+  async function fetchData() {
     setLoading(true); setError(null)
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const { data, error } = await supabase
+      // Fetch scheduled posts
+      const { data: schedData, error: schedErr } = await supabase
         .from('content')
         .select('id, title, platform, scheduled_at, status')
         .eq('user_id', user.id)
@@ -149,65 +151,84 @@ export function ScheduleSection({
         .not('scheduled_at', 'is', null)
         .order('scheduled_at', { ascending: true })
 
-      if (error) throw error
-      setItems((data as ScheduledItem[]) ?? [])
+      if (schedErr) throw schedErr
+      setItems((schedData as ScheduledItem[]) ?? [])
+
+      // 👈 NEW: Fetch drafts so user can select them
+      const { data: draftData, error: draftErr } = await supabase
+        .from('content')
+        .select('id, title, platform')
+        .eq('user_id', user.id)
+        .eq('status', 'draft')
+        .order('created_at', { ascending: false })
+
+      if (draftErr) throw draftErr
+      setDrafts(draftData || [])
+
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load scheduled posts')
+      setError(e instanceof Error ? e.message : 'Failed to load data')
     }
     setLoading(false)
   }
 
-  // ── add item → insert into Supabase content table
+  // Handle Draft Selection
+  const handleDraftSelect = (draftId: string) => {
+    const draft = drafts.find(d => d.id === draftId)
+    if (draft) {
+      setForm(prev => ({ ...prev, draftId, title: draft.title, platform: draft.platform }))
+    } else {
+      setForm(prev => ({ ...prev, draftId: '', title: '' }))
+    }
+  }
+
+  // ── add item → UPDATE existing draft in Supabase
   async function addItem() {
+    if (!form.draftId) { toast('Please select a draft video to schedule', 'error'); return }
     const d = parseInt(form.day)
     const m = parseInt(form.fMonth)
     const y = parseInt(form.fYear)
 
-    if (!form.title.trim()) { toast('Post title is required', 'error'); return }
     if (
       !form.day || !form.fMonth || !form.fYear ||
       isNaN(d) || isNaN(m) || isNaN(y) ||
       d < 1 || d > 31 || m < 1 || m > 12 || y < 2020 || y > 2100
-    ) { toast('Enter a valid date (day / month / year)', 'error'); return }
+    ) { toast('Enter a valid date', 'error'); return }
     if (!form.time) { toast('Fill in a time', 'error'); return }
 
-    // Build ISO timestamp: 'YYYY-MM-DDTHH:MM:00+00:00'
     const dateStr     = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`
     const scheduledAt = `${dateStr}T${form.time}:00+00:00`
 
     setSaving(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Not authenticated')
-
+      // 👈 NEW: UPDATE the draft instead of creating a blank row!
       const { data, error } = await supabase
         .from('content')
-        .insert({
-          user_id:      user.id,
-          title:        form.title.trim(),
-          platform:     form.platform,
-          status:       'scheduled',
+        .update({
+          status: 'scheduled',
           scheduled_at: scheduledAt,
+          title: form.title.trim(),
         })
+        .eq('id', form.draftId)
         .select('id, title, platform, scheduled_at, status')
         .single()
 
       if (error) throw error
 
-      // Update local state and calendar
       setItems(prev => [...prev, data as ScheduledItem].sort((a,b) =>
         new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()
       ))
+      // Remove from drafts dropdown
+      setDrafts(prev => prev.filter(d => d.id !== form.draftId))
+      
       setMonth(m - 1); setYear(y); setSelected(dateStr)
-      setForm({ title:'', platform:'instagram', day:'', fMonth:'', fYear:'', time:'18:00' })
-      toast('Post scheduled!', 'success')
+      setForm({ draftId:'', title:'', platform:'youtube', day:'', fMonth:'', fYear:'', time:'18:00' })
+      toast('Post scheduled successfully!', 'success')
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Failed to schedule post', 'error')
     }
     setSaving(false)
   }
 
-  // ── remove item → update status to 'draft' in Supabase
   async function removeItem(id: string) {
     try {
       const { error } = await supabase
@@ -217,36 +238,22 @@ export function ScheduleSection({
 
       if (error) throw error
       setItems(prev => prev.filter(i => i.id !== id))
-      toast('Post unscheduled', 'info')
+      fetchData() // Refresh drafts dropdown
+      toast('Post returned to drafts', 'info')
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Failed to remove post', 'error')
     }
   }
 
-  // ── calendar helpers
   const firstDay     = new Date(year, month, 1).getDay()
   const daysInMonth  = new Date(year, month + 1, 0).getDate()
+  const scheduledDates = new Set(items.map(i => isoToDateStr(i.scheduled_at)))
+  const fmt = (d: number) => `${year}-${String(month + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`
 
-  // Build set of scheduled dates for the current month view
-  const scheduledDates = new Set(
-    items.map(i => isoToDateStr(i.scheduled_at))
-  )
+  const prevMonth = () => { if (month === 0) { setMonth(11); setYear(y => y - 1) } else setMonth(m => m - 1) }
+  const nextMonth = () => { if (month === 11) { setMonth(0); setYear(y => y + 1) } else setMonth(m => m + 1) }
 
-  const fmt = (d: number) =>
-    `${year}-${String(month + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`
-
-  const prevMonth = () => {
-    if (month === 0) { setMonth(11); setYear(y => y - 1) }
-    else setMonth(m => m - 1)
-  }
-  const nextMonth = () => {
-    if (month === 11) { setMonth(0); setYear(y => y + 1) }
-    else setMonth(m => m + 1)
-  }
-
-  const selectedItems = selected
-    ? items.filter(i => isoToDateStr(i.scheduled_at) === selected)
-    : []
+  const selectedItems = selected ? items.filter(i => isoToDateStr(i.scheduled_at) === selected) : []
 
   return (
     <div style={{ animation: 'fadeIn 0.3s ease' }}>
@@ -262,7 +269,6 @@ export function ScheduleSection({
         select option      { background:#0d1225; color:#e8edf5; }
       `}</style>
 
-      {/* Inline toasts */}
       {!externalToast && (
         <div style={{ position:'fixed', bottom:24, right:24, zIndex:999, display:'flex', flexDirection:'column', gap:8 }}>
           {inlineToasts.map(t => (
@@ -270,7 +276,7 @@ export function ScheduleSection({
               padding:'10px 16px', borderRadius:10, fontSize:12, fontWeight:500, border:'1px solid', maxWidth:300,
               background:  t.type==='success'?'rgba(74,222,128,0.1)' :t.type==='error'?'rgba(248,113,113,0.1)' :'rgba(99,179,237,0.1)',
               borderColor: t.type==='success'?'rgba(74,222,128,0.3)' :t.type==='error'?'rgba(248,113,113,0.3)' :'rgba(99,179,237,0.3)',
-              color:       t.type==='success'?'#4ade80'               :t.type==='error'?'#f87171'               :'#63b3ed',
+              color:       t.type==='success'?'#4ade80'              :t.type==='error'?'#f87171'              :'#63b3ed',
             }}>
               {t.type==='success'?'✓ ':t.type==='error'?'⚠ ':'ℹ '}{t.msg}
             </div>
@@ -278,7 +284,6 @@ export function ScheduleSection({
         </div>
       )}
 
-      {/* Error banner */}
       {error && (
         <div style={{ marginBottom:16, padding:'10px 14px', borderRadius:9, background:'rgba(248,113,113,0.08)', border:'1px solid rgba(248,113,113,0.25)', color:C.danger, fontSize:12, fontFamily:'monospace' }}>
           ⚠ {error}
@@ -290,21 +295,18 @@ export function ScheduleSection({
         {/* ══ LEFT: Calendar ══════════════════════════════════════════════════ */}
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
           <div style={card}>
-            {/* Month nav */}
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:18 }}>
               <button className="nav-btn" onClick={prevMonth} style={{ padding:'5px 11px', borderRadius:7, background:'rgba(255,255,255,0.04)', border:`1px solid ${C.border}`, color:C.text2, fontSize:14, cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s' }}>←</button>
               <div style={{ fontWeight:700, fontSize:14, color:C.text }}>{MONTHS[month]} {year}</div>
               <button className="nav-btn" onClick={nextMonth} style={{ padding:'5px 11px', borderRadius:7, background:'rgba(255,255,255,0.04)', border:`1px solid ${C.border}`, color:C.text2, fontSize:14, cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s' }}>→</button>
             </div>
 
-            {/* Weekday headers */}
             <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:3, marginBottom:6 }}>
               {WEEKDAYS.map(d => (
                 <div key={d} style={{ textAlign:'center', fontSize:9, fontWeight:600, color:C.text3, fontFamily:'monospace', letterSpacing:'0.1em', padding:'4px 0' }}>{d}</div>
               ))}
             </div>
 
-            {/* Day cells */}
             <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:3 }}>
               {Array.from({ length: firstDay }).map((_, i) => (
                 <div key={`e${i}`} style={{ aspectRatio:'1' }} />
@@ -344,7 +346,6 @@ export function ScheduleSection({
               })}
             </div>
 
-            {/* Legend */}
             <div style={{ display:'flex', gap:12, marginTop:14, paddingTop:14, borderTop:`1px solid rgba(255,255,255,0.05)` }}>
               {[
                 { color:'rgba(99,179,237,0.2)', border:'rgba(99,179,237,0.5)', label:'Today' },
@@ -362,7 +363,6 @@ export function ScheduleSection({
             </div>
           </div>
 
-          {/* Selected day popup */}
           {selected && (
             <div style={{ ...card, animation:'fadeIn 0.2s ease' }}>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
@@ -400,18 +400,26 @@ export function ScheduleSection({
           <div style={card}>
             <div style={{ fontSize:14, fontWeight:700, color:C.text, marginBottom:18 }}>Schedule New Post</div>
 
+            {/* 👈 NEW: DRAFTS DROPDOWN */}
             <div style={{ marginBottom:14 }}>
-              <div style={{ fontSize:10, fontWeight:600, color:C.text2, letterSpacing:'0.08em', marginBottom:6, fontFamily:'monospace', textTransform:'uppercase' }}>Post Title</div>
-              <input className="sc-input" style={baseInput} placeholder="What's this post about?" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
+              <div style={{ fontSize:10, fontWeight:600, color:C.text2, letterSpacing:'0.08em', marginBottom:6, fontFamily:'monospace', textTransform:'uppercase' }}>Select Video Draft</div>
+              <select 
+                className="sc-input" 
+                style={{ ...baseInput, appearance:'none', cursor:'pointer' } as React.CSSProperties} 
+                value={form.draftId} 
+                onChange={e => handleDraftSelect(e.target.value)}
+              >
+                <option value="" disabled>-- Select a draft to schedule --</option>
+                {drafts.length === 0 && <option value="" disabled>No drafts available. Go upload one!</option>}
+                {drafts.map(d => (
+                  <option key={d.id} value={d.id}>{d.title} ({d.platform})</option>
+                ))}
+              </select>
             </div>
 
             <div style={{ marginBottom:14 }}>
-              <div style={{ fontSize:10, fontWeight:600, color:C.text2, letterSpacing:'0.08em', marginBottom:6, fontFamily:'monospace', textTransform:'uppercase' }}>Platform</div>
-              <select className="sc-input" style={{ ...baseInput, appearance:'none', cursor:'pointer' } as React.CSSProperties} value={form.platform} onChange={e => setForm(f => ({ ...f, platform: e.target.value as Platform }))}>
-                {(['instagram','youtube','twitter'] as Platform[]).map(p => (
-                  <option key={p} value={p}>{PLAT[p].label}</option>
-                ))}
-              </select>
+              <div style={{ fontSize:10, fontWeight:600, color:C.text2, letterSpacing:'0.08em', marginBottom:6, fontFamily:'monospace', textTransform:'uppercase' }}>Post Title</div>
+              <input className="sc-input" style={baseInput} placeholder="What's this post about?" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
             </div>
 
             <div style={{ marginBottom:14 }}>
@@ -460,7 +468,6 @@ export function ScheduleSection({
             </button>
           </div>
 
-          {/* Best times */}
           <div style={card}>
             <div style={{ fontSize:14, fontWeight:700, color:C.text, marginBottom:4 }}>Best Times to Post</div>
             <div style={{ fontSize:11, color:C.text3, marginBottom:16 }}>Based on your audience engagement patterns</div>
@@ -483,7 +490,6 @@ export function ScheduleSection({
             })}
           </div>
 
-          {/* All scheduled posts */}
           <div style={card}>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
               <div style={{ fontSize:14, fontWeight:700, color:C.text }}>All Scheduled Posts</div>

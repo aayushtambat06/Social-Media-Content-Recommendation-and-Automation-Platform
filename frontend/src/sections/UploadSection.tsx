@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { apiFetch } from '../lib/api'
- 
+
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 type Platform = 'Instagram' | 'YouTube' | 'Twitter'
 type Tone =
@@ -11,26 +11,6 @@ type Tone =
   | 'Inspirational & motivating'
   | 'Trendy & Gen-Z'
   | 'Educational & clear'
- 
-// ─── AI HELPER ────────────────────────────────────────────────────────────────
-// async function callAI(prompt: string, systemPrompt = '') {
-//   const apiKey = import.meta.env.VITE_GROQ_API_KEY
-//   if (!apiKey) throw new Error('VITE_GROQ_API_KEY is missing. Add it to your .env file.')
-//   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-//     method: 'POST',
-//     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-//     body: JSON.stringify({
-//       model: 'llama-3.1-8b-instant',
-//       max_tokens: 1024,
-//       temperature: 0.8,
-//       messages: [{ role: 'user', content: systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt }],
-//     }),
-//   })
-//   const data = await res.json()
-//   if (!res.ok) throw new Error(data?.error?.message || `Groq API error: ${res.status}`)
-//   return data.choices?.[0]?.message?.content || ''
-// }
-
 
 // ─── AI HELPER — calls backend instead of Groq directly ──────────────────────
 async function callAI(description: string, platform: string, tone: string) {
@@ -39,7 +19,7 @@ async function callAI(description: string, platform: string, tone: string) {
     body: JSON.stringify({ description, platform: platform.toLowerCase(), tone }),
   })
 }
- 
+
 // ─── DESIGN TOKENS ────────────────────────────────────────────────────────────
 const C = {
   bg2:        '#0d1225',
@@ -53,7 +33,7 @@ const C = {
   accent4:    '#a78bfa',
   danger:     '#f87171',
 }
- 
+
 const baseInput: React.CSSProperties = {
   width: '100%',
   padding: '9px 13px',
@@ -67,14 +47,14 @@ const baseInput: React.CSSProperties = {
   boxSizing: 'border-box',
   transition: 'border-color 0.15s, box-shadow 0.15s',
 }
- 
+
 const baseCard: React.CSSProperties = {
   background: 'linear-gradient(135deg, rgba(13,18,37,0.95), rgba(8,12,24,0.98))',
   border: `1px solid ${C.border}`,
   borderRadius: 12,
   padding: 20,
 }
- 
+
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 const UploadIcon = () => (
   <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -117,7 +97,7 @@ const AiIcon = () => (
     <path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 8v4l3 3"/><circle cx="19" cy="5" r="3"/>
   </svg>
 )
- 
+
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
 export function UploadSection({
   toast: externalToast,
@@ -132,22 +112,23 @@ export function UploadSection({
     setTimeout(() => setInlineToasts(t => t.filter(x => x.id !== id)), 3200)
   }, [])
   const toast = externalToast ?? inlineToast
- 
+
   const [file,        setFile]        = useState<File | null>(null)
   const [description, setDescription] = useState('')
-  const [platform,    setPlatform]    = useState<Platform>('Instagram')
+  const [platform,    setPlatform]    = useState<Platform>('YouTube') // Set default to YouTube for easier testing
   const [tone,        setTone]        = useState<Tone>('Engaging & casual')
   const [caption,     setCaption]     = useState('')
   const [hashtags,    setHashtags]    = useState<string[]>([])
   const [step,        setStep]        = useState<1 | 2 | 3>(1)
   const [aiLoading,   setAiLoading]   = useState(false)
   const [uploading,   setUploading]   = useState(false)
+  const [isPublishing,setIsPublishing]= useState(false)
   const [drag,        setDrag]        = useState(false)
   const [dragCount,   setDragCount]   = useState(0)
   const [copied,      setCopied]      = useState(false)
- 
+
   const fileRef = useRef<HTMLInputElement>(null)
- 
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault(); setDragCount(0); setDrag(false)
     const f = e.dataTransfer.files?.[0]
@@ -162,36 +143,6 @@ export function UploadSection({
     setFile(null); setCaption(''); setHashtags([])
     setDescription(''); setStep(1); setCopied(false)
   }
- 
-  // const generateAI = async () => {
-  //   if (!description.trim()) { toast('Add a description first', 'error'); return }
-  //   setAiLoading(true); setCaption(''); setHashtags([])
-  //   try {
-  //     const prompt = `Generate social media content for a ${platform} post.\n\nVideo description: "${description}"\nTone: ${tone}\nPlatform: ${platform}\n\nRespond in EXACTLY this format:\nCAPTION:\n[Write a compelling caption here with emojis, 2-4 sentences]\n\nHASHTAGS:\n[List 12-18 hashtags starting with #, space-separated]`
-  //     const result = await callAI(
-  //       prompt,
-  //       `You are an expert ${platform} content strategist. Always respond strictly in the requested CAPTION/HASHTAGS format.`
-  //     )
-  //     const captionMatch = result.match(/CAPTION:\s*\n([\s\S]*?)(?=\n\s*HASHTAGS:)/i)
-  //     const hashtagMatch = result.match(/HASHTAGS:\s*\n([\s\S]*?)$/i)
-  //     const parsedCaption = captionMatch?.[1]?.trim() ?? ''
-  //     const parsedTags    = hashtagMatch
-  //       ? hashtagMatch[1].trim().split(/[\s,\n]+/).filter((t: string) => t.startsWith('#'))
-  //       : []
-  //     if (parsedCaption) {
-  //       setCaption(parsedCaption); setHashtags(parsedTags); setStep(3)
-  //       toast('AI content generated!', 'success')
-  //     } else if (result.trim()) {
-  //       setCaption(result.trim()); setStep(3)
-  //       toast('Content generated!', 'success')
-  //     } else {
-  //       toast('AI returned empty content — try again', 'error')
-  //     }
-  //   } catch (err) {
-  //     toast(`Error: ${err instanceof Error ? err.message : String(err)}`, 'error')
-  //   }
-  //   setAiLoading(false)
-  // }
 
   const generateAI = async () => {
     if (!description.trim()) { toast('Add a description first', 'error'); return }
@@ -208,45 +159,108 @@ export function UploadSection({
     setAiLoading(false)
   }
   
+  // ─── SAVING DRAFTS FOR THE CRON JOB ─────────────────────────────────────────
   const handleUpload = async () => {
     if (!file) { toast('Select a video first', 'error'); return }
     setUploading(true)
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
+      
       const filePath = `${user.id}/${Date.now()}_${file.name}`
       const { error: uploadError } = await supabase.storage.from('videos').upload(filePath, file)
       if (uploadError) throw uploadError
+      
       const { data: { publicUrl } } = supabase.storage.from('videos').getPublicUrl(filePath)
+      
+      // Merge AI caption and hashtags to save to the database so Cron Job can read it
+      const fullAiText = caption ? `${caption}\n\n${hashtags.join(' ')}` : description;
+
       const { error: dbError } = await supabase.from('content').insert({
         user_id: user.id,
-        title: description.trim() || file.name,
-        description,
-        video_url: publicUrl,
+        title: description.trim().substring(0, 95) || file.name,
+        description: fullAiText, // 👈 SAVING THE AI TEXT, NOT JUST THE PROMPT!
+        video_url: publicUrl,    // 👈 SAVING THE URL SO CRON JOB CAN DOWNLOAD IT!
         platform: platform.toLowerCase(),
         status: 'draft',
       })
       if (dbError) throw dbError
-      toast('Video saved to drafts!', 'success')
+      toast('Video saved to drafts! Head to the Schedule tab to automate it.', 'success')
       reset()
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Upload failed', 'error')
     }
     setUploading(false)
   }
- 
+
+  // ─── PUBLISH DIRECTLY NOW ───────────────────────────────────────────────────
+  const handlePublish = async () => {
+    if (platform !== 'YouTube') {
+      toast(`Direct publishing to ${platform} is coming soon!`, 'info');
+      return;
+    }
+    if (!file) {
+      toast('Select a video first', 'error');
+      return;
+    }
+
+    setIsPublishing(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+      
+      // Upload to Supabase first to get URL
+      const filePath = `${user.id}/${Date.now()}_${file.name}`
+      const { error: uploadError } = await supabase.storage.from('videos').upload(filePath, file)
+      if (uploadError) throw uploadError
+      const { data: { publicUrl } } = supabase.storage.from('videos').getPublicUrl(filePath)
+      
+      const cleanTags = hashtags.map(tag => tag.replace('#', ''));
+      
+      const payload = {
+        title: description.trim().substring(0, 95) || file.name, 
+        description: `${caption}\n\n${hashtags.join(' ')}`,
+        tags: cleanTags,
+        privacyStatus: 'private', 
+        video_url: publicUrl // 👈 Sending to backend so it can download and push to YouTube
+      };
+
+      const response = await apiFetch('/api/publish/youtube', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+
+      toast(`Success! Video is live at: ${response.youtubeUrl}`, 'success');
+      
+      // Also save a record of the published post in the DB
+      await supabase.from('content').insert({
+        user_id: user.id,
+        title: payload.title,
+        description: payload.description,
+        video_url: publicUrl,
+        platform: 'youtube',
+        status: 'published', // Marked as published!
+      });
+
+    } catch (err) {
+      toast(`Publishing Error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    } finally {
+      setIsPublishing(false);
+    }
+  }
+
   const copy = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true); toast('Copied!', 'success')
       setTimeout(() => setCopied(false), 2000)
     })
   }
- 
+
   const PLATFORMS: Platform[] = ['Instagram', 'YouTube', 'Twitter']
   const TONES: Tone[]         = ['Engaging & casual','Professional & informative','Funny & relatable','Inspirational & motivating','Trendy & Gen-Z','Educational & clear']
   const PLAT_COLOR: Record<Platform, string> = { Instagram: C.accent4, YouTube: C.danger, Twitter: '#38bdf8' }
   const STEPS = ['Upload Video', 'Describe', 'AI Generate']
- 
+
   return (
     <div style={{ animation: 'fadeIn 0.3s ease' }}>
       <style>{`
@@ -261,7 +275,7 @@ export function UploadSection({
         .up-success:hover   { box-shadow: 0 0 20px rgba(74,222,128,0.15); }
         select option       { background: #0d1225; color: #e8edf5; }
       `}</style>
- 
+
       {/* Inline toasts */}
       {!externalToast && (
         <div style={{ position:'fixed', bottom:24, right:24, zIndex:999, display:'flex', flexDirection:'column', gap:8 }}>
@@ -271,14 +285,14 @@ export function UploadSection({
               border:'1px solid', animation:'slideIn 0.25s ease', maxWidth:300,
               background:  t.type==='success'?'rgba(74,222,128,0.1)' :t.type==='error'?'rgba(248,113,113,0.1)' :'rgba(99,179,237,0.1)',
               borderColor: t.type==='success'?'rgba(74,222,128,0.3)' :t.type==='error'?'rgba(248,113,113,0.3)' :'rgba(99,179,237,0.3)',
-              color:       t.type==='success'?'#4ade80'               :t.type==='error'?'#f87171'               :'#63b3ed',
+              color:       t.type==='success'?'#4ade80'              :t.type==='error'?'#f87171'              :'#63b3ed',
             }}>
               {t.type==='success'?'✓ ':t.type==='error'?'⚠ ':'ℹ '}{t.msg}
             </div>
           ))}
         </div>
       )}
- 
+
       {/* ── Step indicator ───────────────────────────────────────────────── */}
       <div style={{ display:'flex', alignItems:'center', marginBottom:24 }}>
         {STEPS.map((s, i) => (
@@ -310,13 +324,13 @@ export function UploadSection({
           </div>
         ))}
       </div>
- 
+
       {/* ── Two-column layout ─────────────────────────────────────────────── */}
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20 }}>
- 
+
         {/* ══ LEFT ════════════════════════════════════════════════════════════ */}
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
- 
+
           {/* Upload zone or file preview */}
           {!file ? (
             <div
@@ -385,7 +399,7 @@ export function UploadSection({
               </div>
             </div>
           )}
- 
+
           {/* Config: platform, tone, description */}
           <div style={baseCard}>
             {/* Platform toggle */}
@@ -409,7 +423,7 @@ export function UploadSection({
                 ))}
               </div>
             </div>
- 
+
             {/* Tone */}
             <div style={{ marginBottom:16 }}>
               <div style={{ fontSize:10, fontWeight:600, color:C.text2, letterSpacing:'0.08em', marginBottom:6, fontFamily:'monospace', textTransform:'uppercase' }}>Tone / Style</div>
@@ -422,7 +436,7 @@ export function UploadSection({
                 {TONES.map(t => <option key={t}>{t}</option>)}
               </select>
             </div>
- 
+
             {/* Description */}
             <div>
               <div style={{ fontSize:10, fontWeight:600, color:C.text2, letterSpacing:'0.08em', marginBottom:6, fontFamily:'monospace', textTransform:'uppercase' }}>
@@ -441,19 +455,19 @@ export function UploadSection({
               />
             </div>
           </div>
- 
+
           {/* Generate button */}
           <button
             className="up-primary"
-            disabled={aiLoading || !description.trim()}
+            disabled={aiLoading || !description.trim() || !file}
             onClick={generateAI}
             style={{
               width:'100%', padding:'11px 0', borderRadius:9,
               background:'linear-gradient(135deg, rgba(99,179,237,0.18), rgba(99,179,237,0.08))',
               border:'1px solid rgba(99,179,237,0.35)', color:C.accent,
               fontSize:13, fontWeight:600,
-              cursor: aiLoading || !description.trim() ? 'not-allowed' : 'pointer',
-              opacity: !description.trim() ? 0.45 : 1,
+              cursor: aiLoading || !description.trim() || !file ? 'not-allowed' : 'pointer',
+              opacity: !description.trim() || !file ? 0.45 : 1,
               fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:8,
               transition:'all 0.15s',
             }}
@@ -461,10 +475,10 @@ export function UploadSection({
             {aiLoading ? <><SpinnerIcon /> Generating…</> : <><AiIcon /> Generate AI Content</>}
           </button>
         </div>
- 
+
         {/* ══ RIGHT: AI Results ═══════════════════════════════════════════════ */}
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
- 
+
           {step < 3 && !caption ? (
             /* Empty state */
             <div style={{ ...baseCard, flex:1, minHeight:280, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:12, opacity:0.4 }}>
@@ -511,7 +525,7 @@ export function UploadSection({
                   />
                 </div>
               )}
- 
+
               {/* Hashtags */}
               {hashtags.length > 0 && (
                 <div style={{ ...baseCard, animation:'fadeIn 0.35s ease' }}>
@@ -549,27 +563,32 @@ export function UploadSection({
                   </button>
                 </div>
               )}
- 
+
               {/* Action buttons */}
               {caption && (
                 <div style={{ display:'flex', gap:10 }}>
-                  <button className="up-success" onClick={() => toast(`Published to ${platform}!`, 'success')} style={{
-                    flex:1, padding:'10px 0', borderRadius:9,
-                    background:'linear-gradient(135deg, rgba(74,222,128,0.15), rgba(74,222,128,0.08))',
-                    border:'1px solid rgba(74,222,128,0.35)', color:C.accent2,
-                    fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'inherit',
-                    display:'flex', alignItems:'center', justifyContent:'center', gap:7, transition:'all 0.15s',
-                  }}>
-                    <ShareIcon /> Publish to {platform}
+                  <button 
+                    className="up-success" 
+                    disabled={isPublishing || uploading}
+                    onClick={handlePublish} 
+                    style={{
+                      flex:1, padding:'10px 0', borderRadius:9,
+                      background:'linear-gradient(135deg, rgba(74,222,128,0.15), rgba(74,222,128,0.08))',
+                      border:'1px solid rgba(74,222,128,0.35)', color:C.accent2,
+                      fontSize:13, fontWeight:600, cursor: isPublishing || uploading ? 'not-allowed' : 'pointer', fontFamily:'inherit',
+                      display:'flex', alignItems:'center', justifyContent:'center', gap:7, transition:'all 0.15s',
+                    }}
+                  >
+                    {isPublishing ? <><SpinnerIcon /> Publishing...</> : <><ShareIcon /> Publish to {platform}</>}
                   </button>
- 
-                  <button className="up-ghost" onClick={handleUpload} disabled={uploading || !file} style={{
+
+                  <button className="up-ghost" onClick={handleUpload} disabled={uploading || isPublishing || !file} style={{
                     flex:1, padding:'10px 0', borderRadius:9, border:`1px solid ${C.border}`,
-                    background:C.bg2, color: uploading || !file ? C.text3 : C.text2,
-                    fontSize:13, fontWeight:600, cursor: uploading || !file ? 'not-allowed' : 'pointer',
+                    background:C.bg2, color: uploading || isPublishing || !file ? C.text3 : C.text2,
+                    fontSize:13, fontWeight:600, cursor: uploading || isPublishing || !file ? 'not-allowed' : 'pointer',
                     fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:7, transition:'all 0.15s',
                   }}>
-                    {uploading ? <><SpinnerIcon /> Uploading…</> : <><CalIcon /> Save to Draft</>}
+                    {uploading ? <><SpinnerIcon /> Saving…</> : <><CalIcon /> Save to Draft</>}
                   </button>
                 </div>
               )}
