@@ -129,16 +129,38 @@ export function UploadSection({
 
   const fileRef = useRef<HTMLInputElement>(null)
 
+
+  const MAX_FILE_SIZE_MB = 50;
+  const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+
   const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault(); setDragCount(0); setDrag(false)
-    const f = e.dataTransfer.files?.[0]
-    if (f && f.type.startsWith('video/')) { setFile(f); setStep(2) }
-    else toast('Please drop a video file (MP4, MOV, WebM)', 'error')
+  e.preventDefault(); 
+  setDragCount(0); 
+  setDrag(false);
+  const f = e.dataTransfer.files?.[0] as File | undefined;
+  if (f && f.type.startsWith('video/')) {
+    if (f.size > MAX_FILE_SIZE_BYTES) {
+      toast(`File is too large! Maximum size is ${MAX_FILE_SIZE_MB}MB.`, 'error');
+      return;
+    }
+    setFile(f); 
+    setStep(2);
+  } else {
+    toast('Please drop a video file (MP4, MOV, WebM)', 'error');
   }
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0]
-    if (f) { setFile(f); setStep(2) }
+};
+
+const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const f = e.target.files?.[0];
+  if (f) {
+    if (f.size > MAX_FILE_SIZE_BYTES) {
+      toast(`File is too large! Maximum size is ${MAX_FILE_SIZE_MB}MB.`, 'error');
+      return;
+    }
+    setFile(f); 
+    setStep(2);
   }
+};
   const reset = () => {
     setFile(null); setCaption(''); setHashtags([])
     setDescription(''); setStep(1); setCopied(false)
