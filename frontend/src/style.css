@@ -551,3 +551,49 @@ body {
   .main-card { padding: 16px; }
   .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* ─── GLOBALLY RESPONSIVE UTILITY CLASSES ────────────────────────────────────*/
+
+/* 4-Column Grid: Drops to 2 cols on tablet, 1 col on mobile */
+.responsive-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+@media (max-width: 1024px) {
+  .responsive-grid-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+@media (max-width: 768px) {
+  .responsive-grid-4 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* 2-Column Grid: Stacks to 1 col on mobile */
+.responsive-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 768px) {
+  .responsive-grid-2 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Flexbox Stacker: Forces flex rows to stack vertically on small screens */
+@media (max-width: 768px) {
+  .responsive-stack {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+}
+
+/* Hide elements entirely on mobile (good for heavy charts or sidebar menus) */
+@media (max-width: 768px) {
+  .hide-on-mobile {
+    display: none !important;
+  }
+}

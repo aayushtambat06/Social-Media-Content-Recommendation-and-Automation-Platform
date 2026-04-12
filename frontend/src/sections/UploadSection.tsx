@@ -129,7 +129,6 @@ export function UploadSection({
 
   const fileRef = useRef<HTMLInputElement>(null)
 
-
   const MAX_FILE_SIZE_MB = 50;
   const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
@@ -195,14 +194,13 @@ const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
       
       const { data: { publicUrl } } = supabase.storage.from('videos').getPublicUrl(filePath)
       
-      // Merge AI caption and hashtags to save to the database so Cron Job can read it
       const fullAiText = caption ? `${caption}\n\n${hashtags.join(' ')}` : description;
 
       const { error: dbError } = await supabase.from('content').insert({
         user_id: user.id,
         title: description.trim().substring(0, 95) || file.name,
-        description: fullAiText, // 👈 SAVING THE AI TEXT, NOT JUST THE PROMPT!
-        video_url: publicUrl,    // 👈 SAVING THE URL SO CRON JOB CAN DOWNLOAD IT!
+        description: fullAiText, 
+        video_url: publicUrl,    
         platform: platform.toLowerCase(),
         status: 'draft',
       })
@@ -231,7 +229,6 @@ const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
       
-      // Upload to Supabase first to get URL
       const filePath = `${user.id}/${Date.now()}_${file.name}`
       const { error: uploadError } = await supabase.storage.from('videos').upload(filePath, file)
       if (uploadError) throw uploadError
@@ -244,7 +241,7 @@ const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         description: `${caption}\n\n${hashtags.join(' ')}`,
         tags: cleanTags,
         privacyStatus: 'private', 
-        video_url: publicUrl // 👈 Sending to backend so it can download and push to YouTube
+        video_url: publicUrl 
       };
 
       const response = await apiFetch('/api/publish/youtube', {
@@ -254,14 +251,13 @@ const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
 
       toast(`Success! Video is live at: ${response.youtubeUrl}`, 'success');
       
-      // Also save a record of the published post in the DB
       await supabase.from('content').insert({
         user_id: user.id,
         title: payload.title,
         description: payload.description,
         video_url: publicUrl,
         platform: 'youtube',
-        status: 'published', // Marked as published!
+        status: 'published', 
       });
 
     } catch (err) {
@@ -316,7 +312,7 @@ const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
       )}
 
       {/* ── Step indicator ───────────────────────────────────────────────── */}
-      <div style={{ display:'flex', alignItems:'center', marginBottom:24 }}>
+      <div style={{ display:'flex', alignItems:'center', marginBottom:24, overflowX: 'auto', paddingBottom: '4px' }}>
         {STEPS.map((s, i) => (
           <div key={i} style={{ display:'flex', alignItems:'center' }}>
             <div style={{ display:'flex', alignItems:'center', gap:8 }}>
@@ -334,6 +330,7 @@ const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
                 fontSize:12, fontWeight: step===i+1 ? 600 : 400,
                 color: step===i+1 ? C.text : C.text3,
                 transition:'color 0.2s',
+                whiteSpace: 'nowrap'
               }}>{s}</span>
             </div>
             {i < 2 && (
@@ -347,8 +344,8 @@ const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         ))}
       </div>
 
-      {/* ── Two-column layout ─────────────────────────────────────────────── */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20 }}>
+      {/* ── RESPONSIVE GRID WRAPPER ─────────────────────────────────────────── */}
+      <div className="responsive-grid-2">
 
         {/* ══ LEFT ════════════════════════════════════════════════════════════ */}
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
@@ -588,7 +585,7 @@ const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
 
               {/* Action buttons */}
               {caption && (
-                <div style={{ display:'flex', gap:10 }}>
+                <div className="responsive-stack" style={{ display:'flex', gap:10 }}>
                   <button 
                     className="up-success" 
                     disabled={isPublishing || uploading}

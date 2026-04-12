@@ -123,7 +123,7 @@ export function ScheduleSection({
   const [year,     setYear]     = useState(now.getFullYear())
   const [selected, setSelected] = useState<string | null>(null)
   const [items,    setItems]    = useState<ScheduledItem[]>([])
-  const [drafts,   setDrafts]   = useState<DraftItem[]>([]) // 👈 NEW STATE FOR DRAFTS
+  const [drafts,   setDrafts]   = useState<DraftItem[]>([]) 
   const [loading,  setLoading]  = useState(true)
   const [saving,   setSaving]   = useState(false)
   const [error,    setError]    = useState<string | null>(null)
@@ -142,7 +142,6 @@ export function ScheduleSection({
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      // Fetch scheduled posts
       const { data: schedData, error: schedErr } = await supabase
         .from('content')
         .select('id, title, platform, scheduled_at, status')
@@ -154,7 +153,6 @@ export function ScheduleSection({
       if (schedErr) throw schedErr
       setItems((schedData as ScheduledItem[]) ?? [])
 
-      // 👈 NEW: Fetch drafts so user can select them
       const { data: draftData, error: draftErr } = await supabase
         .from('content')
         .select('id, title, platform')
@@ -171,7 +169,6 @@ export function ScheduleSection({
     setLoading(false)
   }
 
-  // Handle Draft Selection
   const handleDraftSelect = (draftId: string) => {
     const draft = drafts.find(d => d.id === draftId)
     if (draft) {
@@ -181,7 +178,6 @@ export function ScheduleSection({
     }
   }
 
-  // ── add item → UPDATE existing draft in Supabase
   async function addItem() {
     if (!form.draftId) { toast('Please select a draft video to schedule', 'error'); return }
     const d = parseInt(form.day)
@@ -200,7 +196,6 @@ export function ScheduleSection({
 
     setSaving(true)
     try {
-      // 👈 NEW: UPDATE the draft instead of creating a blank row!
       const { data, error } = await supabase
         .from('content')
         .update({
@@ -217,7 +212,6 @@ export function ScheduleSection({
       setItems(prev => [...prev, data as ScheduledItem].sort((a,b) =>
         new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()
       ))
-      // Remove from drafts dropdown
       setDrafts(prev => prev.filter(d => d.id !== form.draftId))
       
       setMonth(m - 1); setYear(y); setSelected(dateStr)
@@ -238,7 +232,7 @@ export function ScheduleSection({
 
       if (error) throw error
       setItems(prev => prev.filter(i => i.id !== id))
-      fetchData() // Refresh drafts dropdown
+      fetchData() 
       toast('Post returned to drafts', 'info')
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Failed to remove post', 'error')
@@ -290,7 +284,8 @@ export function ScheduleSection({
         </div>
       )}
 
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20, alignItems:'start' }}>
+      {/* ── RESPONSIVE GRID WRAPPER ─────────────────────────────────────────── */}
+      <div className="responsive-grid-2" style={{ alignItems:'start' }}>
 
         {/* ══ LEFT: Calendar ══════════════════════════════════════════════════ */}
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
@@ -400,7 +395,6 @@ export function ScheduleSection({
           <div style={card}>
             <div style={{ fontSize:14, fontWeight:700, color:C.text, marginBottom:18 }}>Schedule New Post</div>
 
-            {/* 👈 NEW: DRAFTS DROPDOWN */}
             <div style={{ marginBottom:14 }}>
               <div style={{ fontSize:10, fontWeight:600, color:C.text2, letterSpacing:'0.08em', marginBottom:6, fontFamily:'monospace', textTransform:'uppercase' }}>Select Video Draft</div>
               <select 

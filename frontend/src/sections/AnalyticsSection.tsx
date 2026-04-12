@@ -123,25 +123,18 @@ export function AnalyticsSection() {
 
   // Metrics data (from backend)
   const [metrics,        setMetrics]        = useState<MetricsSummary | null>(null)
-  const [metricsRows,    setMetricsRows]     = useState<MetricsRow[]>([])
-  const [loading,        setLoading]         = useState(true)
-  const [seeding,        setSeeding]         = useState(false)
-  const [error,          setError]           = useState<string | null>(null)
+  const [metricsRows,    setMetricsRows]    = useState<MetricsRow[]>([])
+  const [loading,        setLoading]        = useState(true)
+  const [seeding,        setSeeding]        = useState(false)
+  const [error,          setError]          = useState<string | null>(null)
 
   console.log('API URL:', import.meta.env.VITE_API_URL)
   useEffect(() => { fetchAll() }, [])
   
 
-  // async function getToken() {
-  //   const { data: { session } } = await supabase.auth.getSession()
-  //   if (!session?.access_token) throw new Error('Not authenticated')
-  //   return session.access_token
-  // }
-
   async function fetchAll() {
     setLoading(true); setError(null)
     try {
-      // Content — still fetched directly from Supabase
       const contentRes = await supabase
         .from('content')
         .select('id,title,platform,status,created_at,scheduled_at,hashtags')
@@ -150,7 +143,6 @@ export function AnalyticsSection() {
       if (contentRes.error) throw contentRes.error
       setPosts((contentRes.data as ContentRow[]) ?? [])
   
-      // Metrics + analytics — fetched from backend via apiFetch
       const [summaryRes, metricsRes, metricsRowsRes] = await Promise.all([
         apiFetch('/api/analytics/summary'),
         apiFetch('/api/metrics/summary'),
@@ -188,7 +180,6 @@ export function AnalyticsSection() {
 
   const hasMetrics    = metricsRows.length > 0
 
-  // Platform breakdown from metrics or content
   const platformBreakdown = (['instagram','youtube','twitter'] as Platform[]).map(p => {
     const fromMetrics  = metrics?.byPlatform?.[p]
     const contentCount = posts.filter(x => x.platform === p).length
@@ -230,7 +221,7 @@ export function AnalyticsSection() {
         </div>
       )}
 
-      {/* Seed metrics banner — shown when no metrics yet */}
+      {/* Seed metrics banner */}
       {!loading && !hasMetrics && posts.some(p => p.status==='published') && (
         <div style={{ marginBottom:16, padding:'14px 16px', borderRadius:10, background:'linear-gradient(135deg,rgba(99,179,237,0.07),rgba(167,139,250,0.04))', border:'1px solid rgba(99,179,237,0.2)', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
           <div>
@@ -249,7 +240,7 @@ export function AnalyticsSection() {
         </div>
       )}
 
-      {/* Refresh metrics button — shown when metrics exist */}
+      {/* Refresh metrics button */}
       {!loading && hasMetrics && (
         <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:16 }}>
           <button className="seed-btn" onClick={seedMetrics} disabled={seeding} style={{
@@ -283,7 +274,7 @@ export function AnalyticsSection() {
       {tab === 'overview' && (
         <>
           {/* KPI grid */}
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:14, marginBottom:20 }}>
+          <div className="responsive-grid-4" style={{ marginBottom:20 }}>
             {KPI.map((k, i) => (
               <div key={i} style={{ ...card, borderColor:`${k.color}20` }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 }}>
@@ -302,7 +293,7 @@ export function AnalyticsSection() {
             ))}
           </div>
 
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:16 }}>
+          <div className="responsive-grid-2" style={{ marginBottom:16 }}>
             {/* Weekly chart */}
             <div style={card}>
               <div style={{ fontSize:14, fontWeight:700, color:C.text, marginBottom:2 }}>Posts This Week</div>
@@ -360,7 +351,7 @@ export function AnalyticsSection() {
           <div style={card}>
             <div style={{ fontSize:14, fontWeight:700, color:C.text, marginBottom:16 }}>Content Overview</div>
             {loading ? <Skeleton h={60} /> : (
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
+              <div className="responsive-grid-4">
                 {[
                   { label:'Total',     count:totalContent, color:C.accent,  bg:'rgba(99,179,237,0.08)',  border:'rgba(99,179,237,0.2)'  },
                   { label:'Published', count:published,    color:C.accent2, bg:'rgba(74,222,128,0.08)',  border:'rgba(74,222,128,0.2)'  },
@@ -401,50 +392,52 @@ export function AnalyticsSection() {
               {Array.from({length:5}).map((_,i) => <Skeleton key={i} h={44} r={8} />)}
             </div>
           ) : hasMetrics ? (
-            // Show metrics table when metrics exist
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
-              <thead>
-                <tr>{['Platform','Title','Views','Likes','Comments','Shares','Eng. Rate'].map(h => <th key={h} style={TH}>{h}</th>)}</tr>
-              </thead>
-              <tbody>
-                {metricsRows
-                  .filter(m => platform==='all' || m.platform===platform)
-                  .map(m => {
-                    const eng = m.views > 0 ? (((m.likes+m.comments)/m.views)*100).toFixed(1) : '—'
-                    return (
-                      <tr key={m.id} className="an-row">
-                        <td style={TD}><PlatBadge platform={m.platform} /></td>
-                        <td style={{ ...TD, color:C.text, fontWeight:500, maxWidth:200 }}>{m.content?.title ?? '—'}</td>
-                        <td style={{ ...TD, fontFamily:'monospace', fontSize:12 }}>{m.views.toLocaleString()}</td>
-                        <td style={{ ...TD, fontFamily:'monospace', fontSize:12 }}>{m.likes.toLocaleString()}</td>
-                        <td style={{ ...TD, fontFamily:'monospace', fontSize:12 }}>{m.comments.toLocaleString()}</td>
-                        <td style={{ ...TD, fontFamily:'monospace', fontSize:12 }}>{m.shares.toLocaleString()}</td>
-                        <td style={TD}><span style={{ fontFamily:'monospace', fontSize:12, color: parseFloat(eng)>5 ? C.accent2 : C.text2 }}>{eng}{eng!=='—'?'%':''}</span></td>
-                      </tr>
-                    )
-                  })
-                }
-              </tbody>
-            </table>
-          ) : (
-            // Show content table when no metrics
-            <>
+            <div style={{ overflowX: 'auto' }}>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
                 <thead>
-                  <tr>{['Platform','Title','Status','Hashtags','Date'].map(h => <th key={h} style={TH}>{h}</th>)}</tr>
+                  <tr>{['Platform','Title','Views','Likes','Comments','Shares','Eng. Rate'].map(h => <th key={h} style={TH}>{h}</th>)}</tr>
                 </thead>
                 <tbody>
-                  {filteredPosts.map(p => (
-                    <tr key={p.id} className="an-row">
-                      <td style={TD}><PlatBadge platform={p.platform} /></td>
-                      <td style={{ ...TD, color:C.text, fontWeight:500, maxWidth:200 }}>{p.title}</td>
-                      <td style={TD}><StatusBadge status={p.status} /></td>
-                      <td style={{ ...TD, fontFamily:'monospace', fontSize:11, color:C.text3 }}>{p.hashtags?.length ? `${p.hashtags.length} tags` : '—'}</td>
-                      <td style={{ ...TD, fontFamily:'monospace', fontSize:11, color:C.text3 }}>{formatDate(p.created_at)}</td>
-                    </tr>
-                  ))}
+                  {metricsRows
+                    .filter(m => platform==='all' || m.platform===platform)
+                    .map(m => {
+                      const eng = m.views > 0 ? (((m.likes+m.comments)/m.views)*100).toFixed(1) : '—'
+                      return (
+                        <tr key={m.id} className="an-row">
+                          <td style={TD}><PlatBadge platform={m.platform} /></td>
+                          <td style={{ ...TD, color:C.text, fontWeight:500, maxWidth:200 }}>{m.content?.title ?? '—'}</td>
+                          <td style={{ ...TD, fontFamily:'monospace', fontSize:12 }}>{m.views.toLocaleString()}</td>
+                          <td style={{ ...TD, fontFamily:'monospace', fontSize:12 }}>{m.likes.toLocaleString()}</td>
+                          <td style={{ ...TD, fontFamily:'monospace', fontSize:12 }}>{m.comments.toLocaleString()}</td>
+                          <td style={{ ...TD, fontFamily:'monospace', fontSize:12 }}>{m.shares.toLocaleString()}</td>
+                          <td style={TD}><span style={{ fontFamily:'monospace', fontSize:12, color: parseFloat(eng)>5 ? C.accent2 : C.text2 }}>{eng}{eng!=='—'?'%':''}</span></td>
+                        </tr>
+                      )
+                    })
+                  }
                 </tbody>
               </table>
+            </div>
+          ) : (
+            <>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+                  <thead>
+                    <tr>{['Platform','Title','Status','Hashtags','Date'].map(h => <th key={h} style={TH}>{h}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {filteredPosts.map(p => (
+                      <tr key={p.id} className="an-row">
+                        <td style={TD}><PlatBadge platform={p.platform} /></td>
+                        <td style={{ ...TD, color:C.text, fontWeight:500, maxWidth:200 }}>{p.title}</td>
+                        <td style={TD}><StatusBadge status={p.status} /></td>
+                        <td style={{ ...TD, fontFamily:'monospace', fontSize:11, color:C.text3 }}>{p.hashtags?.length ? `${p.hashtags.length} tags` : '—'}</td>
+                        <td style={{ ...TD, fontFamily:'monospace', fontSize:11, color:C.text3 }}>{formatDate(p.created_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               {filteredPosts.length === 0 && <div style={{ textAlign:'center', color:C.text3, padding:'40px 0', fontSize:13 }}>No posts found</div>}
             </>
           )}
@@ -453,7 +446,7 @@ export function AnalyticsSection() {
 
       {/* ══ BEST TIMES ═════════════════════════════════════════════════════ */}
       {tab === 'best times' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+        <div className="responsive-grid-2">
           <div style={card}>
             <div style={{ fontSize:14, fontWeight:700, color:C.text, marginBottom:4 }}>Optimal Posting Windows</div>
             <div style={{ fontSize:11, color:C.text3, marginBottom:20 }}>AI-analyzed from top performing content</div>

@@ -112,7 +112,6 @@ export function SettingsSection({
     if (params.get('success') === 'youtube') {
       setConnections(c => ({ ...c, YouTube: true }));
       toast('YouTube connected successfully!', 'success');
-      // Clean up the URL so it looks nice
       window.history.replaceState({}, document.title, window.location.pathname);
     } else if (params.get('error')) {
       toast('Failed to connect platform.', 'error');
@@ -132,7 +131,6 @@ export function SettingsSection({
   const toggleConn = async (p: Platform) => {
     const isConnecting = !connections[p]
 
-    // If connecting YouTube, trigger the real real OAuth flow!
     if (p === 'YouTube' && isConnecting) {
       try {
         toast('Redirecting to Google...', 'info');
@@ -149,7 +147,7 @@ export function SettingsSection({
 
         const data = await response.json();
         if (data.url) {
-          window.location.href = data.url; // GO TO GOOGLE!
+          window.location.href = data.url; 
         } else {
           toast("Failed to generate YouTube login link.", "error");
         }
@@ -157,10 +155,9 @@ export function SettingsSection({
         console.error("Error connecting YouTube:", err);
         toast("Network error while connecting to YouTube.", "error");
       }
-      return; // Stop here, browser is redirecting
+      return; 
     }
 
-    // Default fallback for Twitter, Instagram, or disconnecting YouTube
     setConnections(c => ({ ...c, [p]: isConnecting }))
     toast(isConnecting ? `${p} connected!` : `${p} disconnected`, isConnecting ? 'success' : 'info')
   }
@@ -198,7 +195,8 @@ export function SettingsSection({
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+      {/* ── RESPONSIVE GRID WRAPPER ─────────────────────────────────────────── */}
+      <div className="responsive-grid-2">
 
         {/* ══ LEFT ════════════════════════════════════════════════════════════ */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -407,7 +405,7 @@ export function SettingsSection({
           <div style={{ ...card, borderColor: 'rgba(248,113,113,0.15)' }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: C.danger, marginBottom: 4 }}>Danger Zone</div>
             <div style={{ fontSize: 11, color: C.text3, marginBottom: 16 }}>These actions are permanent and cannot be undone.</div>
-            <div style={{ display: 'flex', gap: 10 }}>
+            <div className="responsive-stack" style={{ display: 'flex', gap: 10 }}>
               <button className="ghost-btn" onClick={() => toast('Export coming soon', 'info')} style={{
                 flex: 1, padding: '8px 0', borderRadius: 8,
                 border: `1px solid ${C.border}`, background: 'transparent',
