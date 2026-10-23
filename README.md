@@ -50,64 +50,7 @@ The 'Straw' Streaming Method: When publishing to YouTube, the Node backend creat
 
 Cost-Optimized Frugal Engineering: By utilizing Supabase's generous free tier and replacing backend cron jobs with an active frontend monitoring system, Trendpilot achieves enterprise-grade automation on a strict startup budget.
 
-⚙️ Getting Started
 
-Prerequisites
-
-Node.js (v18 or higher)
-
-A Supabase project (URL and Anon Key)
-
-A Groq API Key
-
-Google Cloud Console Project (with YouTube Data API v3 enabled and OAuth credentials)
-
-Environment Variables
-
-Create a .env file in the root of both the client and server directories.
-
-Frontend (client/.env)
-
-VITE_SUPABASE_URL=your_supabase_project_url
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-VITE_API_URL=http://localhost:3001
-
-
-Backend (server/.env)
-
-PORT=3001
-GROQ_API_KEY=your_groq_api_key
-YOUTUBE_CLIENT_ID=your_google_oauth_client_id
-YOUTUBE_CLIENT_SECRET=your_google_oauth_client_secret
-YOUTUBE_REDIRECT_URI=http://localhost:3001/api/auth/youtube/callback
-SUPABASE_URL=your_supabase_project_url
-SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
-
-
-Installation
-
-Clone the repository:
-
-git clone https://github.com/yourusername/trendpilot.git
-cd trendpilot
-
-
-Install Backend Dependencies & Start:
-
-cd server
-npm install
-npm run dev
-
-
-Install Frontend Dependencies & Start:
-
-cd ../client
-npm install
-npm run dev
-
-
-View the App:
-Open http://localhost:5173 in your browser.
 
 🔮 Future Scope (Phase 2)
 
